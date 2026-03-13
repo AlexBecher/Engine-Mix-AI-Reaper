@@ -1,0 +1,80 @@
+{
+  "master_track": 159,
+  "tracks": {
+    "162": {
+      "name": "back",
+      "enabled": true,
+      "min_db": -30.0,
+      "max_db": -10.0
+    },
+    "164": {
+      "name": "lead",
+      "enabled": true,
+      "min_db": -30.0,
+      "max_db": -10.0
+    },
+    "165": {
+      "name": "drums",
+      "enabled": true,
+      "min_db": -30.0,
+      "max_db": -20.0
+    },
+    "166": {
+      "name": "bass",
+      "enabled": true,
+      "min_db": -30.0,
+      "max_db": -22.0
+    },
+    "167": {
+      "name": "key",
+      "enabled": true,
+      "min_db": -30.0,
+      "max_db": -17.9
+    },
+    "168": {
+      "name": "key",
+      "enabled": true,
+      "min_db": -30.0,
+      "max_db": -17.9
+    },
+    "172": {
+      "name": "violao",
+      "enabled": true,
+      "min_db": -30.0,
+      "max_db": -14.0
+    },
+    "154": {
+      "name": "drum kit",
+      "enabled": false,
+      "min_db": -30.0,
+      "max_db": -22.0
+    },
+    "155": {
+      "name": "bateria",
+      "enabled": false,
+      "min_db": -30.0,
+      "max_db": -16.0
+    }
+  },
+  "analysis_settings": {
+    "error_gain_up": 0.5,
+    "error_gain_down": 1.0,
+    "max_step_up_db": 0.05,
+    "max_step_down_db": 0.05,
+    "error_deadband": 0.9,
+    "max_tracks_raise_per_cycle": 7,
+    "lufs_warning_threshold": -14.0
+  },
+  "run_settings": {
+    "profile": "hilsong",
+    "reastream": true,
+    "reastream_identifier": "master",
+    "reastream_host": "0.0.0.0",
+    "reastream_port": 58710,
+    "osc_host": "192.168.15.48",
+    "osc_port": 8000,
+    "channels": 2,
+    "analysis_interval": 3.0,
+    "verbose": true
+  }
+}

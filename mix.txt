@@ -1,0 +1,68 @@
+As tracks são nomeadas no reaper assim:
+
+track 153 = volume geral (master)
+track 154 = Bateria (bus)
+track 155 = Baixo (bus)
+track 156 = Violão (bus)
+track 157 = Guitarra (bus)
+track 158 = Teclado (bus)
+track 160 = Vocal(bus)
+
+
+c:\Users\agbec\Documents\Mix_Robo\venv\Scripts\python.exe learning\train_profile.py audio.wav --name worship --separate
+
+(.venv) PS C:\Users\agbec\Documents\Mix_Robo> .\venv\Scripts\Activate.ps1
+(venv) PS C:\Users\agbec\Documents\Mix_Robo> python run_profile.py --profile worship
+(venv) PS C:\Users\agbec\Documents\Mix_Robo> python run_profile.py --profile worship
+(venv) PS C:\Users\agbec\Documents\Mix_Robo> python run_profile.py --profile worship --verbosepython run_profile.py --
+
+
+serguem NDI nomes 
+Master =  master
+Bateria (bus) = drum
+Baixo (bus) = bass
+Vocal (bus) = vocal
+Teclado(bus) = key
+Violão(bus) = guitar1
+Guitarra(bus) = guitar2
+
+python run_profile.py --profile worship --ndi --verbose   --ndi-source-map "{\"master\":1,\"drum\":2,\"bass\":3,\"vocal\":8,\"key\":6,\"guitar1\":4,\"guitar2\":5}"
+
+python run_profile.py --profile worship --ndi --ndi-source "<18ee68b4>" --ndi-track 1 --verbose
+18ee68b4
+python run_profile.py --profile worship --live  --device "ReaRoute ASIO"   --channels 6   --channel-map '{"0":14,"1":27,"2":35,"3":50,"4":29,"5":5}'   --verbose
+
+
+
+
+Preciso que vc coloque todos os dados de configuração como IP, porta, numero da stracks...em um arquivo como um env para mim poder modificar facil
+
+
+
+depois.
+
+
+ $env:MIX_ROBO_DEBUG="1"; ..venv\Scripts\python run_profile.py --profile worship --reastream --reastream-identifier master --channels 2 --verbose --analysis-interval 5
+$env:MIX_ROBO_DEBUG="1"; .\.venv\Scripts\python .\run_profile.py --profile worship --reastream --reastream-identifier master --channels 2 --verbose --analysis-interval 5
+
+esses limites e o passo por ciclo como argumentos de linha de comando para você calibrar ao vivo sem editar código.
+
+
+Mapeamento novo distribui todas as tracks:
+
+Banda FFT	Hz	Tracks atuadas
+sub	20–60	Baixo (155)
+low	60–250	Baixo (155) + Violão (156)
+mid	250–2k	Guitarra (157) + Teclado (158)
+highmid	2k–6k	Teclado (158) + Vocal (160)
+air	6k–16k	Bateria (154) + Vocal (160)
+
+
+
+Quero na interface poder alterar os endereços das tracks, alterar o endereço da master, quero em cima de cada endereço um botão de mute para mim
+poder ativar e desativar uma track específica para que o script não escreva nela se tiver desativada.
+
+Quero que vc coloque os limites de atuação na tela também para que eu consiga alterar pela interface.
+
+O ideal é que essas variáveis da tela sejam gravadas em um arquivo fora porque vou precisar compilar o script depois para rodar em uma máquina
+separada.

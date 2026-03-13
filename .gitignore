@@ -1,0 +1,42 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.so
+*.egg
+*.egg-info/
+.eggs/
+dist/
+build/
+*.spec.bak
+
+# Environments
+.venv/
+venv/
+env/
+.env
+
+# PyInstaller artifacts
+*.manifest
+*.exe.bak
+
+# Audio / large runtime files
+audio.wav
+modelo.wav
+output_stems/
+peaks/
+learning/separated/
+
+# Logs / temp
+*.log
+tmp.out
+run_out.txt
+build_run.log
+
+# macOS
+.DS_Store
+
+# Windows
+Thumbs.db
+desktop.ini
