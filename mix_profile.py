@@ -8,8 +8,15 @@ from engine.fft_analyzer import analyze
 from engine.tonal_balance import bands
 from engine.decision_engine import decide
 from engine.loudness import get_lufs
-from control.osc_client import configure_from_config, set_volume
-from config_manager import load_config, get_track_db_limits, get_enabled_tracks, get_analysis_settings, get_master_track
+from control.web_api_client import configure_from_config, get_tracks_db, set_track_db
+from config_manager import (
+    load_config,
+    get_track_db_limits,
+    get_track_fader_db,
+    get_enabled_tracks,
+    get_analysis_settings,
+    get_master_track,
+)
 
 SAMPLE_RATE = 44100
 
@@ -17,6 +24,7 @@ SAMPLE_RATE = 44100
 _config = load_config()
 MASTER_TRACK = get_master_track(_config)
 TRACK_DB_LIMITS = get_track_db_limits(_config)
+TRACK_CONFIG_FADER_DB = get_track_fader_db(_config)
 ENABLED_TRACKS = get_enabled_tracks(_config)
 
 settings = get_analysis_settings(_config)
@@ -29,21 +37,9 @@ ERROR_DEADBAND = settings.get("error_deadband", 0.18)
 MAX_TRACKS_RAISE_PER_CYCLE = settings.get("max_tracks_raise_per_cycle", 1)
 
 # =============================================================================
-# Reaper OSC fader math
+# Web API write/read workflow
 # =============================================================================
-_REAPER_FADER_MAX_AMP_ROOT = 10.0 ** (12.0 / 80.0)
-
-def _db_to_reaper(db):
-    return 10.0 ** (db / 80.0) / _REAPER_FADER_MAX_AMP_ROOT
-
-def _reaper_to_db(normalized):
-    if normalized <= 0.0:
-        return float("-inf")
-    return 80.0 * (np.log10(normalized * _REAPER_FADER_MAX_AMP_ROOT))
-
-REAPER_UNITY_FADER = _db_to_reaper(0.0)
-
-TRACK_CURRENT_DB = {}
+TRACK_CURRENT_DB = dict(TRACK_CONFIG_FADER_DB)
 
 # Track mapping - FFT bands to Reaper tracks
 DEFAULT_STEM_TRACK_MAP = {
@@ -184,7 +180,8 @@ def _build_track_map_from_config(config):
 
 def _reload_config():
     """Reload configuration from config.json - useful for hot-reloading."""
-    global _config, MASTER_TRACK, TRACK_DB_LIMITS, ENABLED_TRACKS, ACTIVE_STEM_TRACK_MAP
+    global _config, MASTER_TRACK, TRACK_DB_LIMITS, TRACK_CONFIG_FADER_DB
+    global ENABLED_TRACKS, ACTIVE_STEM_TRACK_MAP
     global LUFS_WARNING_THRESHOLD, ERROR_GAIN_UP, ERROR_GAIN_DOWN
     global MAX_STEP_UP_DB, MAX_STEP_DOWN_DB, ERROR_DEADBAND, MAX_TRACKS_RAISE_PER_CYCLE
     
@@ -193,7 +190,24 @@ def _reload_config():
     ACTIVE_STEM_TRACK_MAP = _build_track_map_from_config(_config)
     MASTER_TRACK = get_master_track(_config)
     TRACK_DB_LIMITS = get_track_db_limits(_config)
+    configured_faders = get_track_fader_db(_config)
     ENABLED_TRACKS = get_enabled_tracks(_config)
+
+    valid_tracks = set(TRACK_DB_LIMITS.keys())
+    for track in list(TRACK_CURRENT_DB.keys()):
+        if track not in valid_tracks:
+            TRACK_CURRENT_DB.pop(track, None)
+
+    for track, configured_db in configured_faders.items():
+        configured_db = float(configured_db)
+        if track not in TRACK_CURRENT_DB:
+            TRACK_CURRENT_DB[track] = configured_db
+            continue
+        previous_config_db = TRACK_CONFIG_FADER_DB.get(track)
+        if previous_config_db is None or float(previous_config_db) != configured_db:
+            TRACK_CURRENT_DB[track] = configured_db
+
+    TRACK_CONFIG_FADER_DB = configured_faders
     
     settings = get_analysis_settings(_config)
     LUFS_WARNING_THRESHOLD = settings.get("lufs_warning_threshold", -14)
@@ -226,7 +240,7 @@ def _command_track(track, desired_db, debug=False):
     min_db, max_db = TRACK_DB_LIMITS.get(track, (-3.0, 1.5))
     desired_db = _clamp(desired_db, min_db, max_db)
 
-    current_db = TRACK_CURRENT_DB.get(track, 0.0)
+    current_db = TRACK_CURRENT_DB.get(track, TRACK_CONFIG_FADER_DB.get(track, 0.0))
     delta = desired_db - current_db
 
     if delta > MAX_STEP_UP_DB:
@@ -237,19 +251,20 @@ def _command_track(track, desired_db, debug=False):
         command_db = desired_db
 
     TRACK_CURRENT_DB[track] = command_db
-    fader = _db_to_reaper(command_db)
-    fader_min = _db_to_reaper(min_db)
-    fader_max = _db_to_reaper(max_db)
-    fader = _clamp(fader, fader_min, fader_max)
 
     if debug:
         print(
             f"[process] Track {track}: target={desired_db:+.2f}dB  "
-            f"applied={command_db:+.2f}dB  fader_OSC={fader:.4f}  "
-            f"(0dB={REAPER_UNITY_FADER:.4f})"
+            f"applied={command_db:+.2f}dB  transport=WEB_API"
         )
 
-    return fader
+    return command_db
+
+
+def _refresh_track_levels(debug=False):
+    levels = get_tracks_db(sorted(ENABLED_TRACKS), verbose=debug)
+    for track, db_value in levels.items():
+        TRACK_CURRENT_DB[track] = db_value
 
 def _load_profiles(profiles_path="learning/profiles.json"):
     if not os.path.exists(profiles_path):
@@ -306,9 +321,11 @@ def process(audio, sample_rate=SAMPLE_RATE, profile_name=None,
             for t in tracks:
                 if t == MASTER_TRACK or t not in ENABLED_TRACKS:
                     continue
-                fader = _command_track(t, desired_db, debug=debug)
-                if fader is not None:
-                    set_volume(t, fader, verbose=debug)
+                command_db = _command_track(t, desired_db, debug=debug)
+                if command_db is not None:
+                    set_track_db(t, command_db, verbose=debug)
+
+        _refresh_track_levels(debug=debug)
         return
 
     profiles = profiles or _load_profiles(profiles_path)
@@ -349,12 +366,14 @@ def process(audio, sample_rate=SAMPLE_RATE, profile_name=None,
                         print(f"[process] Track {t} queued for next cycle (limit {MAX_TRACKS_RAISE_PER_CYCLE}/cycle)")
                     continue
                 raised_tracks += 1
-            fader = _command_track(t, desired_db, debug=debug)
-            if fader is not None:
-                set_volume(t, fader, verbose=debug)
+            command_db = _command_track(t, desired_db, debug=debug)
+            if command_db is not None:
+                set_track_db(t, command_db, verbose=debug)
+
+    _refresh_track_levels(debug=debug)
 
 def process_stems(stems, profile_name=None, profiles_path="learning/profiles.json", stem_track_map=None, verbose=False):
-    """Process multiple separated stems and send OSC updates for each."""
+    """Process multiple separated stems and send Web API updates for each."""
     _reload_config()
     stem_track_map = stem_track_map or ACTIVE_STEM_TRACK_MAP
 
@@ -390,9 +409,11 @@ def process_stems(stems, profile_name=None, profiles_path="learning/profiles.jso
             continue
 
         for band, error in actions:
-            target = _clamp(0.5 + 0.5 * error, 0.0, 1.0)
+            target_db = _error_to_desired_db(error)
             tracks = track if isinstance(track, (list, tuple)) else [track]
             for t in tracks:
                 if verbose:
-                    print(f"{stem_name}:{band} -> track {t} = {target:.3f} (error {error:.3f})")
-                set_volume(t, target)
+                    print(f"{stem_name}:{band} -> track {t} = {target_db:+.2f}dB (error {error:.3f})")
+                set_track_db(t, target_db, verbose=verbose)
+
+    _refresh_track_levels(debug=verbose)

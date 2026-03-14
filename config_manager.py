@@ -49,6 +49,18 @@ def get_track_db_limits(config=None):
         limits[track_id] = (min_db, max_db)
     return limits
 
+def get_track_fader_db(config=None):
+    """Get current track fader dB values as dict {track_id: current_db}."""
+    if config is None:
+        config = load_config()
+
+    faders = {}
+    for track_id_str, track_data in config.get("tracks", {}).items():
+        track_id = int(track_id_str)
+        current_db = track_data.get("fader_db", track_data.get("max_db", 0.0))
+        faders[track_id] = float(current_db)
+    return faders
+
 def get_enabled_tracks(config=None):
     """Get set of enabled track IDs."""
     if config is None:

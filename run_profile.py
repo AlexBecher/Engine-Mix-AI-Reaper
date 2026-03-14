@@ -1,4 +1,4 @@
-"""Run the mix profile logic on separated stems and send OSC commands.
+"""Run the mix profile logic on separated stems and send Web API commands.
 
 This script assumes you already have separated stems (e.g., produced by Demucs) in a
 folder structure like:
@@ -6,7 +6,7 @@ folder structure like:
   separated/<track-name>/<stem>.wav
 
 It will load each stem, compute tonal band values, compare to the profile, and then
-send OSC volume updates via the existing `mix_profile.process_stems` logic.
+send Web API volume updates via the existing `mix_profile.process_stems` logic.
 
 Example:
     python run_profile.py --profile mymix --stems-dir learning/separated/audio
@@ -263,7 +263,7 @@ def main():
     parser.add_argument(
         "--verbose",
         action="store_true",
-        help="Print info about stems and OSC commands.",
+        help="Print info about stems and Web API read/write telemetry.",
     )
     parser.add_argument(
         "--analysis-interval",
