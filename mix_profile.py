@@ -503,8 +503,12 @@ def _apply_actions(actions, track_map, debug=False):
             shared_weight = 1.0 / max(1.0, np.sqrt(float(len(tracks))))
             weight = _role_weight_for_band(role, band) * shared_weight
             weighted_error = float(error) * weight
-            if weighted_error > 0 and role in ("vocals", "backing_vocals"):
-                weighted_error *= 0.85
+            # >>> LOW-END BOOST DAMPER (anti-boost de graves)
+            # Se o erro for POSITIVO (pede BOOST) e a banda estiver no "low end",
+            # atenuamos o empurrão para evitar que baixo/bumbo disparem.
+            if weighted_error > 0.0 and band in ("p20", "p40", "p80", "p160"):
+                weighted_error *= 0.70  # ajuste fino: 0.6–0.85 conforme a sala/PA
+
             track_errors.setdefault(t, []).append(weighted_error)
 
     pending = {}

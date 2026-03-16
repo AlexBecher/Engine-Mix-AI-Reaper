@@ -34,7 +34,7 @@
       "enabled": true,
       "min_db": -32.0,
       "max_db": -16.6,
-      "fader_db": -32.0
+      "fader_db": -20.0
     },
     "11": {
       "name": "violao",

@@ -40,3 +40,6 @@ build_run.log
 # Windows
 Thumbs.db
 desktop.ini
+
+# Local helper scripts (do not version)
+git_local_commit.bat

@@ -1,19 +1,34 @@
 {
-  "worship": {
+  "Worship-Balanced": {
     "master": {
-      "p20":   0.12,
-      "p40":   0.24,
-      "p80":   0.38,
-      "p160":  0.73,
-      "p320":  0.82,
-      "p640":  0.50,
-      "p1200": 0.92,
-      "p2500": 0.86,
-      "p5000": 0.66,
-      "p10000":0.44,
-      "p20000":0.20
+      "p20": 0.12,
+      "p40": 0.22,
+      "p80": 0.45,
+      "p160": 0.60,
+      "p320": 0.80,
+      "p640": 0.70,
+      "p1200": 0.90,
+      "p2500": 0.85,
+      "p5000": 0.65,
+      "p10000": 0.44,
+      "p20000": 0.20
     }
   },
+ "worship": {
+  "master": {
+    "p20": 0.12,
+    "p40": 0.22,
+    "p80": 0.45,    // +0.07 (segura boosts exagerados de sub/fundamental do baixo)
+    "p160": 0.60,   // -0.13 (tira viés de low-mid que puxa bumbo/baixo)
+    "p320": 0.80,   // ~igual
+    "p640": 0.70,   // +0.20 (dá corpo para keys/voz, reduz incentivo a cortar)
+    "p1200": 0.90,  // ~igual
+    "p2500": 0.85,  // ~igual
+    "p5000": 0.65,  // ~igual
+    "p10000": 0.44, // igual
+    "p20000": 0.20  // igual
+  }
+},
   "hilsong": {
     "master": {
       "p20":   0.10,
