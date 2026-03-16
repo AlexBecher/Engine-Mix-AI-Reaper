@@ -69,6 +69,8 @@ def decide(current, reference=None, threshold=0.08):
     denom = float(np.dot(c, c))
     alpha = float(np.dot(r, c) / denom) if denom > 1e-12 else 1.0
     alpha = float(np.clip(alpha, 0.7, 1.3))  # clipe para estabilidade
+    if abs(alpha - 1.0) > 0.01:
+        print(f"[DIAG] alpha (gain-align) = {alpha:.3f}")
 
     actions = []
     for i, band in enumerate(bands):

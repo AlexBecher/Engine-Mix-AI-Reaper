@@ -87,6 +87,13 @@ DEFAULT_STEM_TRACK_MAP = {
 
 ACTIVE_STEM_TRACK_MAP = dict(DEFAULT_STEM_TRACK_MAP)
 
+
+def _is_dry_run_enabled(debug=False):
+    raw_value = os.environ.get("MIX_ROBO_DRY_RUN")
+    if raw_value is None:
+        return bool(debug)
+    return str(raw_value).strip().lower() not in {"", "0", "false", "no", "off"}
+
 def _clamp(value, minimum=0.0, maximum=1.0):
     return max(minimum, min(value, maximum))
 
@@ -485,7 +492,7 @@ def _smooth_track_error(track, error):
     return float(smoothed)
 
 
-def _apply_actions(actions, track_map, debug=False):
+def _apply_actions(actions, track_map, debug=False, dry_run=False):
     """Aggregate band errors per track and apply one coherent command per cycle."""
     track_errors = {}
     for band, error in actions:
@@ -566,7 +573,10 @@ def _apply_actions(actions, track_map, debug=False):
         if command_db is not None:
             if command_db > current_db:
                 raised_tracks += 1
-            set_track_db(t, command_db, verbose=debug)
+            if dry_run:
+                print(f"[DIAG] DRY-RUN: track {t} would be set to {command_db:+.2f}dB")
+            else:
+                set_track_db(t, command_db, verbose=debug)
 
 
 def _refresh_track_levels(debug=False):
@@ -723,9 +733,12 @@ def process(audio, sample_rate=SAMPLE_RATE, profile_name=None,
     _reload_config()
     
     debug = verbose or os.environ.get("MIX_ROBO_DEBUG", "0") != "0"
+    dry_run = _is_dry_run_enabled(debug=debug)
 
     if debug:
         print(f"[process] Starting audio analysis (shape={audio.shape}, duration={len(audio)/sample_rate:.2f}s)")
+    if dry_run:
+        print("[DIAG] DRY-RUN enabled: REAPER writes disabled for this cycle")
 
     lufs = None
     try:
@@ -753,7 +766,13 @@ def process(audio, sample_rate=SAMPLE_RATE, profile_name=None,
 
     if profile_name is None:
         actions = decide(band_values)
-        _apply_actions(actions, track_map, debug=debug)
+        if debug:
+            top = sorted(actions, key=lambda x: abs(x[1]), reverse=True)[:6]
+            print(f"[DIAG] Effective track map: {track_map}")
+            print(f"[DIAG] Top band errors: {top}")
+            print(f"[DIAG] Band values (0..1): {band_values}")
+            print(f"[DIAG] Band meter dB: {band_meter_db}")
+        _apply_actions(actions, track_map, debug=debug, dry_run=dry_run)
 
         _refresh_track_levels(debug=debug)
         return
@@ -771,9 +790,14 @@ def process(audio, sample_rate=SAMPLE_RATE, profile_name=None,
     actions = decide(band_values, reference=reference)
 
     if debug:
+        top = sorted(actions, key=lambda x: abs(x[1]), reverse=True)[:6]
+        print(f"[DIAG] Effective track map: {track_map}")
+        print(f"[DIAG] Top band errors: {top}")
+        print(f"[DIAG] Band values (0..1): {band_values}")
+        print(f"[DIAG] Band meter dB: {band_meter_db}")
         print(f"[process] Actions to execute: {actions}")
 
-    _apply_actions(actions, track_map, debug=debug)
+    _apply_actions(actions, track_map, debug=debug, dry_run=dry_run)
 
     _refresh_track_levels(debug=debug)
 
@@ -781,11 +805,14 @@ def process_stems(stems, profile_name=None, profiles_path="learning/profiles.jso
     """Process multiple separated stems and send Web API updates for each."""
     _reload_config()
     stem_track_map = stem_track_map or ACTIVE_STEM_TRACK_MAP
+    dry_run = _is_dry_run_enabled(debug=verbose)
 
     if verbose:
         print(f"Loaded stems: {sorted(stems.keys())}")
         print(f"Using profile: {profile_name}")
         print(f"Using stem->track map: {stem_track_map}")
+    if dry_run:
+        print("[DIAG] DRY-RUN enabled: REAPER writes disabled for this cycle")
 
     profiles = _load_profiles(profiles_path)
     profile = profiles.get(profile_name, {}) if profile_name else {}
@@ -817,6 +844,9 @@ def process_stems(stems, profile_name=None, profiles_path="learning/profiles.jso
             for t in tracks:
                 if verbose:
                     print(f"{stem_name}:{band} -> track {t} = {target_db:+.2f}dB (error {error:.3f})")
-                set_track_db(t, target_db, verbose=verbose)
+                if dry_run:
+                    print(f"[DIAG] DRY-RUN: track {t} would be set to {target_db:+.2f}dB")
+                else:
+                    set_track_db(t, target_db, verbose=verbose)
 
     _refresh_track_levels(debug=verbose)
