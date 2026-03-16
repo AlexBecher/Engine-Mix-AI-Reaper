@@ -1,77 +1,78 @@
 {
-  "master_track": 159,
+  "master_track": 1,
   "tracks": {
-    "163": {
+    "4": {
       "name": "back",
       "enabled": true,
-      "min_db": -30.0,
-      "max_db": -14.0,
-      "fader_db": -7.74
+      "min_db": -24.0,
+      "max_db": -14.5,
+      "fader_db": 0.04
     },
-    "164": {
-      "name": "lead",
+    "5": {
+      "name": "vocals",
       "enabled": true,
-      "min_db": -30.0,
-      "max_db": -14.0,
-      "fader_db": -14.0
+      "min_db": -40.0,
+      "max_db": -0.0,
+      "fader_db": 0.04
     },
-    "165": {
+    "6": {
       "name": "drums",
       "enabled": true,
-      "min_db": -30.0,
-      "max_db": -20.0,
-      "fader_db": -20.0
+      "min_db": -28.0,
+      "max_db": -11.0,
+      "fader_db": -2.56
     },
-    "166": {
-      "name": "bass",
+    "7": {
+      "name": "baixo",
       "enabled": true,
       "min_db": -30.0,
-      "max_db": -22.0,
-      "fader_db": -22.0
+      "max_db": -0.0,
+      "fader_db": 0.06
     },
-    "167": {
-      "name": "key",
+    "8": {
+      "name": "keys",
       "enabled": true,
-      "min_db": -30.0,
-      "max_db": -17.9,
-      "fader_db": -17.9
+      "min_db": -32.0,
+      "max_db": -16.6,
+      "fader_db": -32.0
     },
-    "168": {
-      "name": "key",
-      "enabled": true,
-      "min_db": -30.0,
-      "max_db": -17.9,
-      "fader_db": -17.9
-    },
-    "172": {
+    "11": {
       "name": "violao",
       "enabled": true,
       "min_db": -30.0,
-      "max_db": -14.0,
-      "fader_db": -14.0
+      "max_db": -17.0,
+      "fader_db": 0.06
+    },
+    "158": {
+      "name": "keys",
+      "enabled": true,
+      "min_db": -32.0,
+      "max_db": -16.6,
+      "fader_db": -19.12
     }
   },
   "analysis_settings": {
-    "error_gain_up": 0.5,
-    "error_gain_down": 1.0,
-    "max_step_up_db": 0.9,
-    "max_step_down_db": 1.0,
-    "error_deadband": 0.5,
+    "error_gain_up": 1.0,
+    "error_gain_down": 1.8,
+    "max_step_up_db": 0.2,
+    "max_step_down_db": 0.45,
+    "error_deadband": 0.12,
     "max_tracks_raise_per_cycle": 7,
-    "lufs_warning_threshold": -10.0
+    "lufs_warning_threshold": -10.0,
+    "silence_floor_rms": 5e-07
   },
   "run_settings": {
-    "profile": "hilsong",
+    "profile": "worship",
     "reastream": true,
     "reastream_identifier": "master",
-    "reastream_host": "0.0.0.0",
+    "reastream_host": "10.210.90.93",
     "reastream_port": 58710,
-    "webapi_host": "127.0.0.1",
+    "webapi_host": "10.210.90.50",
     "webapi_port": 8080,
     "webapi_base": "/_",
     "webapi_timeout": 2.5,
     "channels": 2,
-    "analysis_interval": 3.0,
+    "analysis_interval": 0.8,
     "verbose": true
   }
 }

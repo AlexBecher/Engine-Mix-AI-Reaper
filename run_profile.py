@@ -28,10 +28,25 @@ from mix_profile import process, process_stems
 
 DEFAULT_WASAPI_DEVICE_NAME = "Speakers (USB AUDIO DEVICE)"
 DEFAULT_LIVE_BLOCKSIZE = 4096
-DEFAULT_REASTREAM_HOST = "0.0.0.0"
+DEFAULT_REASTREAM_HOST = "10.0.0.111"
 DEFAULT_REASTREAM_PORT = 58710
 DEFAULT_REASTREAM_IDENTIFIER = "master"
 DEFAULT_REASTREAM_BUFFER_SIZE = 65536
+MIN_ANALYSIS_INTERVAL = 0.5
+
+
+def _normalize_host(host_value, fallback=DEFAULT_REASTREAM_HOST):
+    host = str(host_value or "").strip()
+    return host or fallback
+
+
+def _candidate_bind_hosts(host_value):
+    host = _normalize_host(host_value)
+    candidates = []
+    for value in (host, "0.0.0.0", "127.0.0.1"):
+        if value not in candidates:
+            candidates.append(value)
+    return candidates
 
 
 def _decode_reastream_frames(packet, channels, identifier=None, verbose=False):
@@ -91,11 +106,14 @@ def _decode_reastream_frames(packet, channels, identifier=None, verbose=False):
             pass
 
     # --- Fallback: brute-force scan (step=1 to catch any byte alignment) ---
+    # If an identifier is configured, only allow fallback when identifier bytes
+    # are present in packet. This avoids random UDP while keeping compatibility
+    # with non-standard ReaStream packet layouts.
     if identifier:
         ident_bytes = identifier.encode("utf-8", errors="ignore")
         if ident_bytes and ident_bytes not in packet:
             if verbose:
-                print(f"[DECODE] Identifier bytes not found in packet, rejecting.")
+                print("[DECODE] Identifier bytes not found in packet, rejecting.")
             return None
 
     max_probe = min(256, max(0, len(packet) - 4))
@@ -276,6 +294,15 @@ def main():
     )
     args = parser.parse_args()
 
+    args.reastream_host = _normalize_host(args.reastream_host)
+    if args.analysis_interval < MIN_ANALYSIS_INTERVAL:
+        if args.verbose:
+            print(
+                f"[ANALYSIS] analysis_interval {args.analysis_interval:.2f}s muito curto; "
+                f"usando {MIN_ANALYSIS_INTERVAL:.1f}s para estabilidade."
+            )
+        args.analysis_interval = MIN_ANALYSIS_INTERVAL
+
     track_map = None
     if args.track_map:
         import json
@@ -295,6 +322,13 @@ def main():
 
     if args.live:
         use_reastream = args.reastream
+
+        if use_reastream:
+            print(
+                "[REASTREAM CONFIG] "
+                f"host={args.reastream_host} port={args.reastream_port} "
+                f"identifier={args.reastream_identifier!r}"
+            )
 
         if use_reastream and args.loopback:
             raise SystemExit("--loopback nao pode ser usado junto com --reastream.")
@@ -376,45 +410,75 @@ def main():
             if channel_map is not None:
                 print(f"Using channel map: {channel_map}")
 
-        profiles = None
-        if args.profile:
-            import json
-
-            try:
-                with open("learning/profiles.json", "r", encoding="utf-8") as f:
-                    profiles = json.load(f)
-            except FileNotFoundError:
-                raise SystemExit("No profiles file found at learning/profiles.json")
-
         def _process_audio(audio, map_for_audio):
             if args.verbose:
                 print(f"[_PROCESS_AUDIO] Chamando process() com audio shape {audio.shape}, profile '{args.profile}'")
+            # Pass profiles=None so mix_profile._load_profiles() rereads profiles.json
+            # on every cycle, picking up any changes made while the script is running.
             process(
                 audio,
                 sample_rate=args.sr,
                 profile_name=args.profile,
                 stem_track_map=map_for_audio,
-                profiles=profiles,
+                profiles=None,
                 verbose=args.verbose,
             )
             if args.verbose:
                 print(f"[_PROCESS_AUDIO] Retornou de process()")
 
-        def _callback(indata, frames, time_info, status):
-            if status and args.verbose:
-                print("Audio status:", status)
+        min_samples_for_analysis = max(1024, int(args.sr * 0.5))
+        analysis_state = {
+            "stereo_chunks": [],
+            "stereo_samples": 0,
+            "stereo_last": time.monotonic(),
+            "channel_chunks": {},
+            "channel_samples": {},
+            "channel_last": {},
+        }
 
-            # indata shape: (frames, channels)
-            if indata.ndim == 1:
-                _process_audio(indata, track_map)
+        if args.verbose:
+            print(
+                f"[ANALYSIS] Janela de {args.analysis_interval:.1f}s "
+                f"(min {min_samples_for_analysis} samples) para cada ajuste."
+            )
+
+        def _buffer_and_maybe_process(frames):
+            if frames is None:
                 return
 
+            frame_array = np.asarray(frames)
+            if frame_array.ndim == 1:
+                frame_array = frame_array.reshape(-1, 1)
+            if frame_array.size == 0 or frame_array.shape[0] <= 0:
+                return
+
+            # Copy to detach from sounddevice callback buffer lifecycle.
+            frame_array = np.array(frame_array, dtype=np.float32, copy=True)
+
+            now = time.monotonic()
             if channel_map:
-                # process each mapped channel separately
                 for ch_idx, track in channel_map.items():
-                    if ch_idx < 0 or ch_idx >= indata.shape[1]:
+                    if ch_idx < 0 or ch_idx >= frame_array.shape[1]:
                         continue
-                    channel_audio = indata[:, ch_idx]
+
+                    channel_audio = frame_array[:, ch_idx]
+                    analysis_state["channel_chunks"].setdefault(ch_idx, []).append(channel_audio)
+                    analysis_state["channel_samples"][ch_idx] = (
+                        analysis_state["channel_samples"].get(ch_idx, 0) + channel_audio.shape[0]
+                    )
+                    analysis_state["channel_last"].setdefault(ch_idx, now)
+
+                    elapsed = now - analysis_state["channel_last"][ch_idx]
+                    if elapsed < args.analysis_interval:
+                        continue
+                    if analysis_state["channel_samples"].get(ch_idx, 0) < min_samples_for_analysis:
+                        continue
+
+                    window_audio = np.concatenate(analysis_state["channel_chunks"][ch_idx], axis=0)
+                    analysis_state["channel_chunks"][ch_idx] = []
+                    analysis_state["channel_samples"][ch_idx] = 0
+                    analysis_state["channel_last"][ch_idx] = now
+
                     band_map = {
                         "sub": track,
                         "low": track,
@@ -423,15 +487,48 @@ def main():
                         "highmid": track,
                         "air": track,
                     }
-                    _process_audio(channel_audio, band_map)
-            else:
-                # Keep stereo mix when available (no forced mono downmix).
-                _process_audio(indata, track_map)
+                    if args.verbose:
+                        print(
+                            f"[PROCESS] Janela canal {ch_idx} pronta "
+                            f"({window_audio.shape[0]} samples) -> track {track}"
+                        )
+                    _process_audio(window_audio, band_map)
+                return
+
+            analysis_state["stereo_chunks"].append(frame_array)
+            analysis_state["stereo_samples"] += frame_array.shape[0]
+
+            elapsed = now - analysis_state["stereo_last"]
+            if elapsed < args.analysis_interval:
+                return
+            if analysis_state["stereo_samples"] < min_samples_for_analysis:
+                return
+
+            window_audio = np.concatenate(analysis_state["stereo_chunks"], axis=0)
+            analysis_state["stereo_chunks"] = []
+            analysis_state["stereo_samples"] = 0
+            analysis_state["stereo_last"] = now
+
+            if args.verbose:
+                print(
+                    f"[PROCESS] Janela pronta ({window_audio.shape[0]} samples). "
+                    f"Processando profile '{args.profile}' em {'stereo' if window_audio.ndim > 1 else 'mono'}"
+                )
+            _process_audio(window_audio, track_map)
+
+        def _callback(indata, frames, time_info, status):
+            if status and args.verbose:
+                print("Audio status:", status)
+
+            _buffer_and_maybe_process(indata)
 
         if use_reastream:
             ident = (args.reastream_identifier or "").strip()
             if ident.lower() == "any":
                 ident = ""
+
+            def _emit_reastream_status(state, detail):
+                print(f"[REASTREAM STATUS] {state} {detail}")
 
             sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
             try:
@@ -449,63 +546,60 @@ def main():
             # Set timeout so recvfrom() doesn't block forever, allowing Ctrl+C to work on Windows
             sock.settimeout(0.5)
 
-            # On Windows, binding to 0.0.0.0 doesn't properly receive localhost traffic.
-            # Try binding to the specified host first; if it fails on Windows with 0.0.0.0,
-            # also try 127.0.0.1 for local broadcast compatibility.
-            bind_host = args.reastream_host
-            try:
-                sock.bind((bind_host, args.reastream_port))
-                if args.verbose:
-                    print(f"[REASTREAM] Bindado em {bind_host}:{args.reastream_port}")
-            except OSError as exc:
-                if getattr(exc, "winerror", None) == 10048:
-                    sock.close()
-                    raise SystemExit(
-                        "Nao foi possivel abrir a porta UDP 58710 do ReaStream porque ela ja esta em uso. "
-                        "Feche/desative instancias de ReaStream em modo Receive no REAPER (ou outro app que esteja escutando nessa porta) "
-                        "e execute novamente."
-                    )
-                # On Windows, if binding to 0.0.0.0 fails for other reasons, try localhost
-                if bind_host == "0.0.0.0":
-                    sock.close()
-                    sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-                    try:
-                        sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-                    except OSError:
-                        pass
-                    try:
-                        sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
-                    except OSError:
-                        pass
-                    try:
-                        sock.bind(("127.0.0.1", args.reastream_port))
-                        if args.verbose:
-                            print(f"[REASTREAM] Nao conseguiu bind em 0.0.0.0, bindado em 127.0.0.1:{args.reastream_port} para broadcast local")
-                    except OSError as exc2:
+            bind_errors = []
+            bound_host = None
+            for bind_host in _candidate_bind_hosts(args.reastream_host):
+                try:
+                    sock.bind((bind_host, args.reastream_port))
+                    bound_host = bind_host
+                    _emit_reastream_status("BOUND", f"{bind_host}:{args.reastream_port}")
+                    if args.verbose:
+                        print(f"[REASTREAM] Bindado em {bind_host}:{args.reastream_port}")
+                        if bind_host != args.reastream_host:
+                            print(
+                                f"[REASTREAM] Host solicitado {args.reastream_host} indisponivel; "
+                                f"usando fallback {bind_host}."
+                            )
+                    break
+                except OSError as exc:
+                    if getattr(exc, "winerror", None) == 10048:
                         sock.close()
-                        raise exc2
-                else:
-                    sock.close()
-                    raise
+                        raise SystemExit(
+                            "Nao foi possivel abrir a porta UDP 58710 do ReaStream porque ela ja esta em uso. "
+                            "Feche/desative instancias de ReaStream em modo Receive no REAPER (ou outro app que esteja escutando nessa porta) "
+                            "e execute novamente."
+                        )
+                    bind_errors.append((bind_host, exc))
+
+            if bound_host is None:
+                sock.close()
+                details = "; ".join(
+                    f"{host}: [WinError {getattr(exc, 'winerror', 'n/a')}] {exc}"
+                    for host, exc in bind_errors
+                )
+                raise SystemExit(f"Nao foi possivel bindar o ReaStream em nenhum host local: {details}")
 
             try:
                 print("Capturing ReaStream audio... press Ctrl+C to stop.")
                 packet_count = 0
-                min_samples_for_analysis = max(1024, int(args.sr * 0.5))
-                mono_buffer = []
-                buffered_samples = 0
-                last_analysis_time = time.monotonic()
-                if args.verbose:
-                    print(
-                        f"[ANALYSIS] Janela de {args.analysis_interval:.1f}s "
-                        f"(min {min_samples_for_analysis} samples) para cada ajuste."
-                    )
+                last_packet_time = None
+                stream_state = "waiting"
                 while True:
                     try:
                         data, _ = sock.recvfrom(max(1024, args.reastream_buffer_size))
                     except TimeoutError:
+                        if last_packet_time is None and stream_state != "waiting":
+                            stream_state = "waiting"
+                            _emit_reastream_status("WAITING", "No packets yet")
+                        elif last_packet_time is not None and (time.monotonic() - last_packet_time) > 2.0 and stream_state != "stalled":
+                            stream_state = "stalled"
+                            _emit_reastream_status("STALL", "No packets for >2s")
                         continue
                     packet_count += 1
+                    last_packet_time = time.monotonic()
+                    if stream_state != "streaming":
+                        stream_state = "streaming"
+                        _emit_reastream_status("STREAMING", f"packets={packet_count}")
                     if args.verbose:
                         print(f"[UDP RECV #{packet_count}] Pacote de {len(data)} bytes recebido")
 
@@ -520,43 +614,7 @@ def main():
                         peak = np.max(np.abs(frames))
                         print(f"[DECODE OK #{packet_count}] {frames.shape[0]} samples, {frames.shape[1]} channels, peak: {peak:.4f}")
 
-                    if channel_map:
-                        # process each mapped channel separately
-                        for ch_idx, track in channel_map.items():
-                            if ch_idx < 0 or ch_idx >= frames.shape[1]:
-                                continue
-                            channel_audio = frames[:, ch_idx]
-                            band_map = {
-                                "sub": track,
-                                "low": track,
-                                "mid": track,
-                                "vocal": track,
-                                "highmid": track,
-                                "air": track,
-                            }
-                            if args.verbose:
-                                print(f"[CHANNEL] Processando canal {ch_idx} ? track {track}")
-                            _process_audio(channel_audio, band_map)
-                    else:
-                        # Keep stereo and accumulate a time window before each decision.
-                        mono_buffer.append(frames)
-                        buffered_samples += frames.shape[0]
-
-                        elapsed = time.monotonic() - last_analysis_time
-                        if elapsed < args.analysis_interval or buffered_samples < min_samples_for_analysis:
-                            continue
-
-                        window_audio = np.concatenate(mono_buffer, axis=0)
-                        mono_buffer.clear()
-                        buffered_samples = 0
-                        last_analysis_time = time.monotonic()
-
-                        if args.verbose:
-                            print(
-                                f"[PROCESS] Janela pronta ({window_audio.shape[0]} samples). "
-                                f"Processando profile '{args.profile}' em {'stereo' if window_audio.ndim > 1 else 'mono'}"
-                            )
-                        _process_audio(window_audio, track_map)
+                    _buffer_and_maybe_process(frames)
             except KeyboardInterrupt:
                 print("Live capture stopped.")
             finally:

@@ -1,0 +1,8 @@
+numpy
+requests
+sounddevice
+pyloudnorm
+soundfile
+librosa
+PyQt5
+pyqtgraph

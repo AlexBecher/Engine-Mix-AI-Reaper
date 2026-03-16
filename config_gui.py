@@ -14,11 +14,18 @@ from pathlib import Path
 from tkinter import messagebox, ttk
 
 from config_manager import CONFIG_FILE, load_config, save_config
-BAND_ORDER = ["sub", "low", "mid", "highmid", "air"]
+BAND_ORDER = ["p20", "p40", "p80", "p160", "p320", "p640", "p1200", "p2500", "p5000", "p10000", "p20000"]
 TRACK_ACTION_RE = re.compile(r"\[process\]\s+Track\s+(\d+):")
 TRACK_APPLIED_DB_RE = re.compile(r"\[process\]\s+Track\s+(\d+):.*?applied=([+-]?\d+(?:\.\d+)?)dB")
 WEBAPI_TELEMETRY_RE = re.compile(r"\[WEBAPI (?:SET|READ)\]\s+track=(\d+)\s+db=([+-]?\d+(?:\.\d+)?)")
+WEBAPI_STATUS_RE = re.compile(r"\[WEBAPI STATUS\]\s+(\w+)\s+(.+)")
+REASTREAM_STATUS_RE = re.compile(r"\[REASTREAM STATUS\]\s+(\w+)\s+(.+)")
+MASTER_METER_RE = re.compile(r"\[process\]\s+Master meters:\s+LUFS=([+-]?(?:\d+(?:\.\d+)?|nan))\s+RMS=([+-]?\d+(?:\.\d+)?)dB")
 MAX_TRACK_ROWS = 9
+METER_DB_FLOOR = -24.0
+METER_DB_CEIL = 6.0
+BAR_ATTACK = 0.35
+BAR_RELEASE = 0.12
 
 # Full Reaper fader hardware range: 0% = -133 dB, 100% = +12 dB
 REAPER_FADER_MIN_DB = -133.0
@@ -37,6 +44,7 @@ class ConfigGUI:
         self.root = root
         self.root.title("Alex Studio MIX  - AI")
         self.root.geometry("1240x760")
+        self.root.configure(bg="#06080b")
 
         self.config = load_config(CONFIG_FILE)
         self.track_vars = {}
@@ -47,25 +55,105 @@ class ConfigGUI:
         self._track_row_counter = 0
         self.analysis_vars = {}
         self.run_vars = {}
-        self.band_values = {band: 0.0 for band in BAND_ORDER}
-        self.band_peak = {band: 1e-6 for band in BAND_ORDER}
+        self.band_values = {band: METER_DB_FLOOR for band in BAND_ORDER}
+        self.band_targets = {band: METER_DB_FLOOR for band in BAND_ORDER}
         self.band_ui = {}
+        self.band_graph_canvas = None
         self.mixer_canvas = None
         self.mixer_slot_items = {}
         self.mixer_anim_jobs = {}
         self.mixer_anim_duration_ms = 140
         self.fader_strip_img = None
         self.fader_button_img = None
+        self.scroll_canvas = None
+        self.scroll_content = None
+        self.scroll_window_id = None
 
         self.process_handle = None
         self.output_queue = queue.Queue()
         self.profile_combo = None
+        self.webapi_status_label = None
+        self.reastream_status_label = None
+        self.master_meter_label = None
 
         self._ensure_defaults()
+        self._apply_dark_theme()
         self._build_ui()
         self._rebuild_mixer_view()
         self._schedule_ui_updates()
         self.root.protocol("WM_DELETE_WINDOW", self._on_close)
+
+    def _apply_dark_theme(self):
+        style = ttk.Style(self.root)
+        try:
+            style.theme_use("clam")
+        except Exception:
+            pass
+
+        bg = "#06080b"
+        card = "#0d1117"
+        field = "#111827"
+        edge = "#1f2937"
+        text = "#f5f8ff"
+        accent = "#4cc9ff"
+
+        # Family names with spaces must be wrapped for Tk option database parsing.
+        self.root.option_add("*Font", "{Segoe UI} 9")
+        self.root.option_add("*TCombobox*Listbox.background", field)
+        self.root.option_add("*TCombobox*Listbox.foreground", text)
+        self.root.option_add("*TCombobox*Listbox.selectBackground", "#1e3a8a")
+        self.root.option_add("*TCombobox*Listbox.selectForeground", "#e6f7ff")
+
+        style.configure(".", background=bg, foreground=text)
+        style.configure("TFrame", background=bg)
+        style.configure("TLabelframe", background=card, borderwidth=1, relief="solid")
+        style.configure("TLabelframe.Label", background=card, foreground=accent, font=("Segoe UI", 9, "bold"))
+        style.configure("TLabel", background=card, foreground=text)
+        style.configure(
+            "TEntry",
+            fieldbackground=field,
+            foreground=text,
+            bordercolor=edge,
+            lightcolor=edge,
+            darkcolor=edge,
+            insertcolor="#ffffff",
+        )
+        style.configure(
+            "TButton",
+            background="#172033",
+            foreground="#e6f7ff",
+            bordercolor="#334155",
+            lightcolor="#334155",
+            darkcolor="#334155",
+            focusthickness=1,
+            focuscolor="#4cc9ff",
+            padding=(8, 4),
+        )
+        style.map(
+            "TButton",
+            background=[("active", "#1f2f4d"), ("pressed", "#0f172a")],
+            foreground=[("disabled", "#64748b")],
+        )
+        style.configure("TCheckbutton", background=card, foreground=text)
+        style.map("TCheckbutton", foreground=[("active", "#d7ecff")])
+        style.configure(
+            "TCombobox",
+            fieldbackground=field,
+            background=field,
+            foreground=text,
+            arrowcolor=accent,
+            bordercolor=edge,
+            lightcolor=edge,
+            darkcolor=edge,
+        )
+        style.configure("Vertical.TScrollbar", background="#111827", troughcolor="#0b1220", bordercolor="#1f2937")
+
+    def _reset_band_graph(self):
+        for band in BAND_ORDER:
+            self.band_values[band] = METER_DB_FLOOR
+            self.band_targets[band] = METER_DB_FLOOR
+        if self.master_meter_label is not None:
+            self.master_meter_label.config(text="Master: LUFS -- | RMS -- dB")
 
     def _ensure_defaults(self):
         self.config.setdefault("master_track", 153)
@@ -84,23 +172,62 @@ class ConfigGUI:
         run.setdefault("webapi_base", "/_")
         run.setdefault("webapi_timeout", 2.5)
         run.setdefault("channels", 2)
-        run.setdefault("analysis_interval", 3.0)
+        run.setdefault("analysis_interval", 5.0)
         run.setdefault("verbose", True)
         run.pop("osc_host", None)
         run.pop("osc_port", None)
 
     def _build_ui(self):
-        self.root.columnconfigure(0, weight=0)
-        self.root.columnconfigure(1, weight=1)
+        self.root.columnconfigure(0, weight=1)
         self.root.rowconfigure(0, weight=1)
 
-        left = ttk.Frame(self.root, padding=10)
-        right = ttk.Frame(self.root, padding=10)
+        shell = ttk.Frame(self.root)
+        shell.grid(row=0, column=0, sticky="nsew")
+        shell.columnconfigure(0, weight=1)
+        shell.rowconfigure(0, weight=1)
+
+        self.scroll_canvas = tk.Canvas(shell, highlightthickness=0, bd=0, bg="#06080b")
+        v_scroll = ttk.Scrollbar(shell, orient="vertical", command=self.scroll_canvas.yview)
+        self.scroll_canvas.configure(yscrollcommand=v_scroll.set)
+
+        self.scroll_canvas.grid(row=0, column=0, sticky="nsew")
+        v_scroll.grid(row=0, column=1, sticky="ns")
+
+        self.scroll_content = ttk.Frame(self.scroll_canvas, padding=10)
+        self.scroll_window_id = self.scroll_canvas.create_window((0, 0), window=self.scroll_content, anchor="nw")
+
+        self.scroll_content.bind("<Configure>", self._on_scroll_content_configure)
+        self.scroll_canvas.bind("<Configure>", self._on_scroll_canvas_configure)
+        self.root.bind_all("<MouseWheel>", self._on_mousewheel)
+
+        self.scroll_content.columnconfigure(0, weight=0)
+        self.scroll_content.columnconfigure(1, weight=1)
+        self.scroll_content.rowconfigure(0, weight=1)
+
+        left = ttk.Frame(self.scroll_content, padding=10)
+        right = ttk.Frame(self.scroll_content, padding=10)
         left.grid(row=0, column=0, sticky="nsew")
         right.grid(row=0, column=1, sticky="nsew")
 
         self._build_config_panel(left)
         self._build_runtime_panel(right)
+
+    def _on_scroll_content_configure(self, _event):
+        if self.scroll_canvas is None:
+            return
+        self.scroll_canvas.configure(scrollregion=self.scroll_canvas.bbox("all"))
+
+    def _on_scroll_canvas_configure(self, event):
+        if self.scroll_canvas is None or self.scroll_window_id is None:
+            return
+        self.scroll_canvas.itemconfigure(self.scroll_window_id, width=event.width)
+
+    def _on_mousewheel(self, event):
+        if self.scroll_canvas is None:
+            return
+        step = int(-1 * (event.delta / 120))
+        if step:
+            self.scroll_canvas.yview_scroll(step, "units")
 
     def _build_config_panel(self, parent):
         parent.columnconfigure(0, weight=1)
@@ -114,7 +241,7 @@ class ConfigGUI:
         tracks_box = ttk.LabelFrame(parent, text="Tracks (mute + IDs + limits)", padding=10)
         tracks_box.grid(row=1, column=0, sticky="ew", pady=(0, 8))
         self.tracks_box = tracks_box
-        headers = ["LED", "Active", "Track ID", "Name", "Min dB", "Max dB", "Faders"]
+        headers = ["LED", "Active", "Track ID", "Name", "Min dB", "Max dB", "Band"]
         for idx, text in enumerate(headers):
             ttk.Label(tracks_box, text=text).grid(row=0, column=idx, padx=4, pady=(0, 4), sticky="w")
 
@@ -146,6 +273,7 @@ class ConfigGUI:
             "error_deadband": 0.18,
             "max_tracks_raise_per_cycle": 1,
             "lufs_warning_threshold": -14,
+            "silence_floor_rms": 1e-6,
         }
         labels = [
             ("Error gain up", "error_gain_up", tk.DoubleVar),
@@ -155,6 +283,7 @@ class ConfigGUI:
             ("Error deadband", "error_deadband", tk.DoubleVar),
             ("Max tracks raise/cycle", "max_tracks_raise_per_cycle", tk.IntVar),
             ("LUFS warning threshold", "lufs_warning_threshold", tk.DoubleVar),
+            ("Silence floor RMS", "silence_floor_rms", tk.DoubleVar),
         ]
 
         for row_idx, (label, key, var_type) in enumerate(labels):
@@ -177,7 +306,7 @@ class ConfigGUI:
         self.run_vars["webapi_base"] = tk.StringVar(value=str(run.get("webapi_base", "/_")))
         self.run_vars["webapi_timeout"] = tk.DoubleVar(value=float(run.get("webapi_timeout", 2.5)))
         self.run_vars["channels"] = tk.IntVar(value=int(run.get("channels", 2)))
-        self.run_vars["analysis_interval"] = tk.DoubleVar(value=float(run.get("analysis_interval", 3.0)))
+        self.run_vars["analysis_interval"] = tk.DoubleVar(value=float(run.get("analysis_interval", 5.0)))
         self.run_vars["verbose"] = tk.BooleanVar(value=bool(run.get("verbose", True)))
         self.run_vars["reastream"] = tk.BooleanVar(value=bool(run.get("reastream", True)))
 
@@ -249,6 +378,34 @@ class ConfigGUI:
         if not current and values:
             self.run_vars["profile"].set(values[0])
 
+    def _infer_band_label_for_track(self, track_name):
+        name = str(track_name or "").strip().lower()
+        if not name:
+            return "unmapped"
+
+        if any(alias in name for alias in ("back", "backing", "choir", "coro", "bv")):
+            return "p640-p1200 (back vocal body)"
+        if any(alias in name for alias in ("vocal", "vox", "voz", "lead")):
+            return "p1200-p2500 (lead presence)"
+        if any(alias in name for alias in ("drum", "bateria")):
+            return "p80-p160 + p5000 (impact/attack)"
+        if any(alias in name for alias in ("bass", "baixo", "sub")):
+            return "p20-p80 (sub/low end)"
+        if any(alias in name for alias in ("keys", "key", "piano", "teclado", "synth", "pad", "kbd")):
+            return "p320-p1200 (mid body)"
+        if any(alias in name for alias in ("violao", "guitar", "gtr", "guitarra")):
+            return "p320-p2500 (harmonics/presence)"
+        return "p320-p640 (support bus)"
+
+    def _update_track_band_label(self, row_data):
+        if row_data is None:
+            return
+        band_var = row_data.get("band_label")
+        name_var = row_data.get("name")
+        if band_var is None or name_var is None:
+            return
+        band_var.set(self._infer_band_label_for_track(name_var.get()))
+
     def _add_track_row(self, track_id, name="", enabled=True, min_db=-6.0, max_db=0.0, fader_db=0.0):
         if self.tracks_box is None:
             return
@@ -263,6 +420,7 @@ class ConfigGUI:
         min_var = tk.DoubleVar(value=float(min_db))
         max_var = tk.DoubleVar(value=float(max_db))
         fader_var = tk.DoubleVar(value=float(fader_db))
+        band_label_var = tk.StringVar(value=self._infer_band_label_for_track(name_var.get()))
 
         led_canvas = tk.Canvas(self.tracks_box, width=14, height=14, highlightthickness=0, bd=0)
         led_item = led_canvas.create_oval(2, 2, 12, 12, fill="#595959", outline="#3c3c3c")
@@ -273,7 +431,7 @@ class ConfigGUI:
         ttk.Entry(self.tracks_box, textvariable=name_var, width=14).grid(row=row, column=3, padx=4, sticky="w")
         ttk.Entry(self.tracks_box, textvariable=min_var, width=8).grid(row=row, column=4, padx=4, sticky="w")
         ttk.Entry(self.tracks_box, textvariable=max_var, width=8).grid(row=row, column=5, padx=4, sticky="w")
-        ttk.Entry(self.tracks_box, textvariable=fader_var, width=8).grid(row=row, column=6, padx=4, sticky="w")
+        ttk.Label(self.tracks_box, textvariable=band_label_var, width=30).grid(row=row, column=6, padx=4, sticky="w")
 
         row_data = {
             "enabled": enabled_var,
@@ -282,6 +440,7 @@ class ConfigGUI:
             "min_db": min_var,
             "max_db": max_var,
             "fader_db": fader_var,
+            "band_label": band_label_var,
             "led_canvas": led_canvas,
             "led_item": led_item,
             "led_reset_job": None,
@@ -322,7 +481,9 @@ class ConfigGUI:
             fader_db=0.0,
         )
 
-    def _on_track_row_changed(self, _row_key):
+    def _on_track_row_changed(self, row_key):
+        row_data = self.track_vars.get(row_key)
+        self._update_track_band_label(row_data)
         self._rebuild_mixer_view()
 
     def _on_track_fader_changed(self, row_key):
@@ -394,36 +555,101 @@ class ConfigGUI:
         self.start_stop_btn.grid(row=0, column=0, padx=(0, 8), sticky="w")
         ttk.Button(control_box, text="SAVE CONFIG", command=self._save_config).grid(row=0, column=1, sticky="w")
 
-        self.runtime_label = ttk.Label(control_box, text="Stopped", foreground="red")
+        self.runtime_label = ttk.Label(control_box, text="Stopped", foreground="#ff6b6b")
         self.runtime_label.grid(row=1, column=0, columnspan=2, sticky="w", pady=(8, 0))
 
-        self.status_label = ttk.Label(control_box, text="Ready", foreground="blue")
+        self.status_label = ttk.Label(control_box, text="Ready", foreground="#4cc9ff")
         self.status_label.grid(row=2, column=0, columnspan=2, sticky="w", pady=(6, 0))
 
-        graph_box = ttk.LabelFrame(parent, text="Audio bands (live bargraph)", padding=10)
-        graph_box.grid(row=1, column=0, sticky="nsew")
+        self.reastream_status_label = ttk.Label(control_box, text="ReaStream: unknown", foreground="#6b7280")
+        self.reastream_status_label.grid(row=3, column=0, columnspan=2, sticky="w", pady=(4, 0))
+
+        self.webapi_status_label = ttk.Label(control_box, text="Web API: unknown", foreground="#6b7280")
+        self.webapi_status_label.grid(row=4, column=0, columnspan=2, sticky="w", pady=(2, 0))
+
+        self.master_meter_label = ttk.Label(control_box, text="Master: LUFS -- | RMS -- dB", foreground="#95d5ff")
+        self.master_meter_label.grid(row=5, column=0, columnspan=2, sticky="w", pady=(6, 0))
+
+        graph_box = ttk.LabelFrame(parent, text="Audio bands (live RMS dB meter)", padding=10)
+        graph_box.grid(row=1, column=0, sticky="nsew", pady=(6, 4))
         parent.rowconfigure(1, weight=1)
 
-        for row, band in enumerate(BAND_ORDER):
-            ttk.Label(graph_box, text=band.upper(), width=10).grid(row=row, column=0, sticky="w", pady=5)
-            pb = ttk.Progressbar(graph_box, orient="horizontal", mode="determinate", maximum=100, length=260)
-            pb.grid(row=row, column=1, sticky="ew", padx=(6, 10), pady=5)
-            value_lbl = ttk.Label(graph_box, text="0.000000", width=10)
-            value_lbl.grid(row=row, column=2, sticky="e", pady=5)
-            self.band_ui[band] = {"bar": pb, "label": value_lbl}
-
-        graph_box.columnconfigure(1, weight=1)
+        self.band_graph_canvas = tk.Canvas(graph_box, height=250, highlightthickness=0, bd=0, bg="#070d09")
+        self.band_graph_canvas.grid(row=0, column=0, sticky="nsew")
+        self.band_graph_canvas.bind("<Configure>", self._on_band_graph_resize)
+        graph_box.columnconfigure(0, weight=1)
+        graph_box.rowconfigure(0, weight=1)
+        self._rebuild_band_graph()
 
         mixer_box = ttk.LabelFrame(parent, text="Track faders", padding=10)
-        mixer_box.grid(row=2, column=0, sticky="nsew", pady=(8, 0))
+        mixer_box.grid(row=2, column=0, sticky="nsew", pady=(4, 0))
         parent.rowconfigure(2, weight=1)
 
-        self.mixer_canvas = tk.Canvas(mixer_box, height=300, highlightthickness=0, bd=0, bg="#242628")
+        self.mixer_canvas = tk.Canvas(mixer_box, height=280, highlightthickness=0, bd=0, bg="#111317")
         self.mixer_canvas.grid(row=0, column=0, sticky="nsew")
         self.mixer_canvas.bind("<Configure>", self._on_mixer_canvas_resize)
         mixer_box.columnconfigure(0, weight=1)
         mixer_box.rowconfigure(0, weight=1)
         self._load_mixer_images()
+
+    def _on_band_graph_resize(self, _event):
+        self._rebuild_band_graph()
+
+    def _rebuild_band_graph(self):
+        if self.band_graph_canvas is None:
+            return
+
+        canvas = self.band_graph_canvas
+        canvas.delete("all")
+        self.band_ui = {}
+
+        w = max(1, int(canvas.winfo_width()))
+        h = max(1, int(canvas.winfo_height()))
+        left = 14
+        right = 14
+        top = 26
+        bottom = 36
+        plot_w = max(1, w - left - right)
+        plot_h = max(1, h - top - bottom)
+        slot = plot_w / float(len(BAND_ORDER))
+
+        for i in range(6):
+            y = top + (plot_h * i / 5.0)
+            canvas.create_line(left, y, w - right, y, fill="#132018")
+
+        for idx, band in enumerate(BAND_ORDER):
+            x_left = left + (idx * slot) + (slot * 0.18)
+            x_right = left + ((idx + 1) * slot) - (slot * 0.18)
+            x_mid = (x_left + x_right) * 0.5
+            floor_y = top + plot_h
+
+            canvas.create_rectangle(x_left, top, x_right, floor_y, fill="#0d1510", outline="#1d3525")
+            bar_item = canvas.create_rectangle(x_left, floor_y, x_right, floor_y, fill="#8cff3d", outline="#6cf136")
+            value_item = canvas.create_text(
+                x_mid,
+                12,
+                text=f"{METER_DB_FLOOR:+.1f} dB",
+                fill="#5ad8ff",
+                font=("Consolas", 8, "bold"),
+            )
+            label_item = canvas.create_text(
+                x_mid,
+                h - 16,
+                text=band.upper(),
+                fill="#f7fbff",
+                font=("Segoe UI", 8, "bold"),
+            )
+            self.band_ui[band] = {
+                "bar": bar_item,
+                "value": value_item,
+                "label": label_item,
+                "x0": x_left,
+                "x1": x_right,
+                "top": top,
+                "bottom": floor_y,
+            }
+
+        self._refresh_bars()
 
     def _on_mixer_canvas_resize(self, _event):
         self._rebuild_mixer_view()
@@ -493,13 +719,13 @@ class ConfigGUI:
         available_w = max(1, int(canvas.winfo_width()))
         slot_w = max(min_slot_w, (available_w - left_pad - right_pad) / float(len(visible_rows)))
         strip_pitch = (self.fader_strip_img.width() + 20) if self.fader_strip_img is not None else 58
-        top_label_y = 18
-        top_id_y = 36
-        track_top_y = 50
-        track_bottom_y = 248
+        top_label_y = 12
+        top_id_y = 26
+        track_top_y = 36
+        track_bottom_y = 230
 
         content_width = left_pad + right_pad + max(slot_w * len(visible_rows), strip_pitch * len(visible_rows))
-        canvas.config(scrollregion=(0, 0, content_width, 300))
+        canvas.config(scrollregion=(0, 0, content_width, 280))
 
         for idx, row_data in enumerate(visible_rows):
             x0 = left_pad + idx * strip_pitch
@@ -532,13 +758,13 @@ class ConfigGUI:
                     strip_top,
                     strip_left + 48,
                     strip_bottom,
-                    outline="#a7a7a7",
-                    fill="#3a3d40",
+                    outline="#6b7280",
+                    fill="#2b3038",
                 )
 
             # Draw labels after center_x is finalized from strip geometry.
-            canvas.create_text(center_x, top_label_y, text=name, fill="#f0f0f0", font=("Segoe UI", 9, "bold"))
-            canvas.create_text(center_x, top_id_y, text=str(track_id), fill="#d0d0d0", font=("Segoe UI", 9))
+            canvas.create_text(center_x, top_label_y, text=name, fill="#eaf5ff", font=("Segoe UI", 9, "bold"))
+            canvas.create_text(center_x, top_id_y, text=str(track_id), fill="#6fd3ff", font=("Segoe UI", 9))
 
             top_y = strip_top + 10
             bottom_y = min(strip_bottom - 10, track_bottom_y)
@@ -562,7 +788,7 @@ class ConfigGUI:
 
             value_item = canvas.create_text(
                 center_x,
-                min(292, strip_bottom + 30),
+                min(268, strip_bottom + 28),
                 text=f"{float(row_data['fader_db'].get()):+.2f} dB",
                 fill="#8fb9ff",
                 font=("Consolas", 8),
@@ -717,6 +943,10 @@ class ConfigGUI:
         cfg = dict(self.config)
         cfg["master_track"] = int(self.master_var.get())
 
+        silence_floor = float(self.analysis_vars["silence_floor_rms"].get())
+        if not math.isfinite(silence_floor) or silence_floor < 0.0 or silence_floor > 1e-2:
+            silence_floor = 1e-6
+
         tracks = {}
         for _, vars_dict in self.track_vars.items():
             track_id = int(vars_dict["track_id"].get())
@@ -737,13 +967,14 @@ class ConfigGUI:
             "error_deadband": float(self.analysis_vars["error_deadband"].get()),
             "max_tracks_raise_per_cycle": int(self.analysis_vars["max_tracks_raise_per_cycle"].get()),
             "lufs_warning_threshold": float(self.analysis_vars["lufs_warning_threshold"].get()),
+            "silence_floor_rms": silence_floor,
         }
 
         cfg["run_settings"] = {
             "profile": str(self.run_vars["profile"].get()).strip(),
             "reastream": bool(self.run_vars["reastream"].get()),
             "reastream_identifier": str(self.run_vars["reastream_identifier"].get()).strip(),
-            "reastream_host": str(self.run_vars["reastream_host"].get()).strip(),
+            "reastream_host": str(self.run_vars["reastream_host"].get()).strip() or "0.0.0.0",
             "reastream_port": int(self.run_vars["reastream_port"].get()),
             "webapi_host": str(self.run_vars["webapi_host"].get()).strip(),
             "webapi_port": int(self.run_vars["webapi_port"].get()),
@@ -836,6 +1067,12 @@ class ConfigGUI:
             self.start_stop_btn.config(text="STOP")
             self.runtime_label.config(text="Running", foreground="green")
             self.status_label.config(text="[OK] Script started", foreground="green")
+            if self.reastream_status_label is not None:
+                self.reastream_status_label.config(text="ReaStream: starting...", foreground="#1d4ed8")
+            if self.webapi_status_label is not None:
+                self.webapi_status_label.config(text="Web API: waiting...", foreground="#1d4ed8")
+            if self.master_meter_label is not None:
+                self.master_meter_label.config(text="Master: LUFS -- | RMS -- dB", foreground="#95d5ff")
         except Exception as exc:
             self.process_handle = None
             self.status_label.config(text=f"[ERROR] Start failed: {exc}", foreground="red")
@@ -856,6 +1093,11 @@ class ConfigGUI:
             self.process_handle = None
             self.start_stop_btn.config(text="START")
             self.runtime_label.config(text="Stopped", foreground="red")
+            if self.reastream_status_label is not None:
+                self.reastream_status_label.config(text="ReaStream: stopped", foreground="#6b7280")
+            if self.webapi_status_label is not None:
+                self.webapi_status_label.config(text="Web API: stopped", foreground="#6b7280")
+            self._reset_band_graph()
             if manual:
                 self.status_label.config(text="[OK] Script stopped", foreground="blue")
 
@@ -892,9 +1134,22 @@ class ConfigGUI:
                     if isinstance(parsed, dict):
                         for band in BAND_ORDER:
                             if band in parsed:
-                                value = float(parsed[band])
-                                self.band_values[band] = value
-                                self.band_peak[band] = max(self.band_peak[band] * 0.995, abs(value), 1e-6)
+                                value = max(0.0, min(1.0, float(parsed[band])))
+                                meter_db = METER_DB_FLOOR + (value * (METER_DB_CEIL - METER_DB_FLOOR))
+                                self.band_targets[band] = meter_db
+                except Exception:
+                    pass
+
+            if "[process] Band meter dB:" in line:
+                payload = line.split("[process] Band meter dB:", 1)[1].strip()
+                try:
+                    parsed = ast.literal_eval(payload)
+                    if isinstance(parsed, dict):
+                        for band in BAND_ORDER:
+                            if band in parsed:
+                                meter_db = float(parsed[band])
+                                meter_db = max(METER_DB_FLOOR, min(METER_DB_CEIL, meter_db))
+                                self.band_targets[band] = meter_db
                 except Exception:
                     pass
 
@@ -920,15 +1175,65 @@ class ConfigGUI:
                 self._set_track_fader_value(track_id, live_db)
                 self._update_mixer_knob_for_track(track_id, animate=False)
 
+            webapi_status_match = WEBAPI_STATUS_RE.search(line)
+            if webapi_status_match and self.webapi_status_label is not None:
+                state = webapi_status_match.group(1).upper()
+                detail = webapi_status_match.group(2).strip()
+                color = "#1d4ed8"
+                if state == "OK":
+                    color = "#15803d"
+                elif state == "ERROR":
+                    color = "#b91c1c"
+                self.webapi_status_label.config(text=f"Web API: {state} ({detail})", foreground=color)
+
+            reastream_status_match = REASTREAM_STATUS_RE.search(line)
+            if reastream_status_match and self.reastream_status_label is not None:
+                state = reastream_status_match.group(1).upper()
+                detail = reastream_status_match.group(2).strip()
+                color = "#1d4ed8"
+                if state in {"STREAMING", "BOUND"}:
+                    color = "#15803d"
+                elif state in {"STALL", "ERROR"}:
+                    color = "#b91c1c"
+                self.reastream_status_label.config(text=f"ReaStream: {state} ({detail})", foreground=color)
+                if state in {"WAITING", "STALL", "ERROR", "STOPPED"}:
+                    self._reset_band_graph()
+
+            master_meter_match = MASTER_METER_RE.search(line)
+            if master_meter_match and self.master_meter_label is not None:
+                lufs_raw = master_meter_match.group(1)
+                rms_db = float(master_meter_match.group(2))
+                if lufs_raw.lower() == "nan":
+                    text = f"Master: LUFS -- | RMS {rms_db:+.1f} dB"
+                else:
+                    text = f"Master: LUFS {float(lufs_raw):+.1f} | RMS {rms_db:+.1f} dB"
+                self.master_meter_label.config(text=text, foreground="#95d5ff")
+
     def _refresh_bars(self):
+        if self.band_graph_canvas is None:
+            return
+
         for band in BAND_ORDER:
-            raw = float(self.band_values[band])
-            peak = max(self.band_peak[band], 1e-6)
-            normalized = min(100.0, max(0.0, (abs(raw) / peak) * 100.0))
-            self.band_ui[band]["bar"]["value"] = normalized
-            self.band_ui[band]["label"].config(text=f"{raw:.6f}")
+            if band not in self.band_ui:
+                continue
+            current = float(self.band_values[band])
+            target = float(self.band_targets[band])
+            alpha = BAR_ATTACK if target >= current else BAR_RELEASE
+            current += (target - current) * alpha
+            self.band_values[band] = current
+            normalized = ((current - METER_DB_FLOOR) / (METER_DB_CEIL - METER_DB_FLOOR)) * 100.0
+            normalized = min(100.0, max(0.0, normalized))
+            slot = self.band_ui[band]
+            bar_height = (normalized / 100.0) * (slot["bottom"] - slot["top"])
+            y_top = slot["bottom"] - bar_height
+            self.band_graph_canvas.coords(slot["bar"], slot["x0"], y_top, slot["x1"], slot["bottom"])
+            self.band_graph_canvas.itemconfig(slot["value"], text=f"{current:+.1f} dB")
 
     def _on_close(self):
+        try:
+            self.root.unbind_all("<MouseWheel>")
+        except Exception:
+            pass
         self._stop_process(manual=False)
         self.root.destroy()
 

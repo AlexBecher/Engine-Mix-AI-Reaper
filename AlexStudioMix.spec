@@ -5,7 +5,7 @@ a = Analysis(
     ['config_gui.py'],
     pathex=[],
     binaries=[],
-    datas=[],
+    datas=[('C:\\Users\\agbec\\Documents\\Mix_Robo\\icon.png', '.'), ('C:\\Users\\agbec\\Documents\\Mix_Robo\\fader.png', '.'), ('C:\\Users\\agbec\\Documents\\Mix_Robo\\fader_buttom.png', '.')],
     hiddenimports=['soundfile', 'sounddevice', 'pyloudnorm'],
     hookspath=[],
     hooksconfig={},
@@ -32,6 +32,7 @@ exe = EXE(
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
+    icon=['C:\\Users\\agbec\\Documents\\Mix_Robo\\build\\icon_256.ico'],
 )
 coll = COLLECT(
     exe,

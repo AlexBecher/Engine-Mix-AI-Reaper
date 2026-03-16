@@ -1,0 +1,50 @@
+Preset Worship (mais suave e musical)
+Error gain up: 0.75
+Error gain down: 2.10
+Max step up (dB): 0.25
+Max step down (dB): 0.60
+Error deadband: 0.12
+Max tracks raise/cycle: 2
+LUFS warning threshold: -16.0
+Analysis interval (s): 2.5
+Preset Hillsong (mais firme para segurar brilho e médios altos)
+Error gain up: 0.65
+Error gain down: 2.40
+Max step up (dB): 0.20
+Max step down (dB): 0.75
+Error deadband: 0.10
+Max tracks raise/cycle: 1
+LUFS warning threshold: -15.0
+Analysis interval (s): 2.0
+
+Limites de track recomendados (base)
+Lead vocal: Min -24.0 | Max -14.5
+Backing vocal: Min -30.0 | Max -19.0
+Drums: Min -28.0 | Max -16.0
+Bass: Min -30.0 | Max -18.0
+Keys/Piano: Min -30.0 | Max -16.5
+Violão/Guitarra: Min -30.0 | Max -17.0
+FX/Other: Min -32.0 | Max -18.0
+Variação para voz mais falada (controle mais firme do médio-grave)
+Lead vocal: Min -24.0 | Max -16.0
+Backing vocal: Min -30.0 | Max -20.0
+Max tracks raise/cycle: 1
+Max step up: 0.15
+Max step down: 0.80
+Error gain up: 0.60
+Error gain down: 2.60
+Error deadband: 0.12
+Variação para voz mais cantada (mais aberta)
+Lead vocal: Min -24.0 | Max -13.5
+Backing vocal: Min -30.0 | Max -18.5
+Max tracks raise/cycle: 2
+Max step up: 0.25
+Max step down: 0.60
+Error gain up: 0.75
+Error gain down: 2.10
+Error deadband: 0.10
+Dica prática para o teu caso (voz sobe médio-grave)
+Começa com Lead max em -16.0.
+Se ainda “engrossar”, baixa para -17.0.
+Mantém Backing pelo menos 3 dB abaixo do Lead no limite máximo.
+Deixa Bass com máximo no máximo em -18.0 para não competir com a fala.

@@ -6,9 +6,30 @@ $ErrorActionPreference = "Stop"
 $root = Split-Path -Parent $MyInvocation.MyCommand.Path
 Set-Location $root
 
-$python = Join-Path $root ".venv\Scripts\python.exe"
-if (!(Test-Path $python)) {
-    throw "Python venv not found at $python"
+$pythonCandidates = @(
+    (Join-Path $root "venv\Scripts\python.exe"),
+    (Join-Path $root ".venv\Scripts\python.exe")
+)
+
+$python = $pythonCandidates | Where-Object { Test-Path $_ } | Select-Object -First 1
+if (-not $python) {
+    $paths = $pythonCandidates -join " or "
+    throw "Python venv not found. Expected $paths"
+}
+
+Write-Host "Using Python from: $python"
+
+$iconPath = Join-Path $root "icon.png"
+$faderPath = Join-Path $root "fader.png"
+$faderBottomPath = Join-Path $root "fader_buttom.png"
+$buildAssetsDir = Join-Path $root "build"
+$iconPngBuildPath = Join-Path $buildAssetsDir "icon_256.png"
+$iconBuildPath = Join-Path $buildAssetsDir "icon_256.ico"
+
+foreach ($asset in @($iconPath, $faderPath, $faderBottomPath)) {
+    if (!(Test-Path $asset)) {
+        throw "Required asset not found: $asset"
+    }
 }
 
 function Invoke-PyInstaller {
@@ -45,12 +66,78 @@ if ($Clean) {
     if (Test-Path "$root\dist") { Remove-Item "$root\dist" -Recurse -Force }
 }
 
+if (!(Test-Path $buildAssetsDir)) {
+    New-Item -ItemType Directory -Path $buildAssetsDir | Out-Null
+}
+
+Add-Type -AssemblyName System.Drawing
+$srcImage = [System.Drawing.Image]::FromFile($iconPath)
+try {
+    $targetSize = 256
+    $bitmap = New-Object System.Drawing.Bitmap($targetSize, $targetSize)
+    try {
+        $graphics = [System.Drawing.Graphics]::FromImage($bitmap)
+        try {
+            $graphics.InterpolationMode = [System.Drawing.Drawing2D.InterpolationMode]::HighQualityBicubic
+            $graphics.SmoothingMode = [System.Drawing.Drawing2D.SmoothingMode]::HighQuality
+            $graphics.PixelOffsetMode = [System.Drawing.Drawing2D.PixelOffsetMode]::HighQuality
+            $graphics.Clear([System.Drawing.Color]::Transparent)
+            $graphics.DrawImage($srcImage, 0, 0, $targetSize, $targetSize)
+        }
+        finally {
+            $graphics.Dispose()
+        }
+
+        $bitmap.Save($iconPngBuildPath, [System.Drawing.Imaging.ImageFormat]::Png)
+    }
+    finally {
+        $bitmap.Dispose()
+    }
+}
+finally {
+    $srcImage.Dispose()
+}
+
+$pngBytes = [System.IO.File]::ReadAllBytes($iconPngBuildPath)
+$stream = New-Object System.IO.FileStream($iconBuildPath, [System.IO.FileMode]::Create, [System.IO.FileAccess]::Write)
+try {
+    $writer = New-Object System.IO.BinaryWriter($stream)
+    try {
+        # ICONDIR header
+        $writer.Write([UInt16]0)
+        $writer.Write([UInt16]1)
+        $writer.Write([UInt16]1)
+
+        # ICONDIRENTRY for one 256x256 PNG image
+        $writer.Write([Byte]0)  # width: 0 means 256
+        $writer.Write([Byte]0)  # height: 0 means 256
+        $writer.Write([Byte]0)  # color palette count
+        $writer.Write([Byte]0)  # reserved
+        $writer.Write([UInt16]1)   # color planes
+        $writer.Write([UInt16]32)  # bits per pixel
+        $writer.Write([UInt32]$pngBytes.Length)
+        $writer.Write([UInt32]22)  # image data offset
+
+        $writer.Write($pngBytes)
+    }
+    finally {
+        $writer.Dispose()
+    }
+}
+finally {
+    $stream.Dispose()
+}
+
 # Build GUI executable (windowed)
 Invoke-PyInstaller @(
     "--noconfirm",
     "--clean",
     "--name", "AlexStudioMix",
     "--windowed",
+    "--icon", $iconBuildPath,
+    "--add-data", "$iconPath;.",
+    "--add-data", "$faderPath;.",
+    "--add-data", "$faderBottomPath;.",
     "--hidden-import", "soundfile",
     "--hidden-import", "sounddevice",
     "--hidden-import", "pyloudnorm",
@@ -82,6 +169,11 @@ if (!(Test-Path $workerExe)) {
 
 # Copy worker exe into GUI app folder
 Copy-Item $workerExe "$appDir\run_profile_worker.exe" -Force
+
+# Keep image assets at dist root for straightforward runtime loading.
+Copy-Item $iconPath "$appDir\icon.png" -Force
+Copy-Item $faderPath "$appDir\fader.png" -Force
+Copy-Item $faderBottomPath "$appDir\fader_buttom.png" -Force
 
 # External editable config
 Copy-Item "$root\config.json" "$appDir\config.json" -Force

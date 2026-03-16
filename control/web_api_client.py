@@ -21,6 +21,17 @@ DEBUG = False
 _session: Optional[requests.Session] = None
 _target: Optional[tuple] = None
 _timeout = DEFAULT_TIMEOUT
+_last_status: Optional[tuple] = None
+
+
+def _emit_status(state: str, detail: str) -> None:
+    """Emit Web API status only when state/detail changes to avoid log spam."""
+    global _last_status
+    payload = (state, detail)
+    if _last_status == payload:
+        return
+    _last_status = payload
+    print(f"[WEBAPI STATUS] {state} {detail}")
 
 
 def clamp_db(value: float) -> float:
@@ -59,6 +70,7 @@ def _set_target(host: str, port: int, base: str, timeout: float, verbose: bool =
     _session = requests.Session()
     _target = target
     _timeout = float(timeout)
+    _emit_status("CONFIG", target[0])
     if DEBUG or verbose:
         print(f"[WEBAPI CONFIG] url={target[0]} timeout={target[1]:.2f}s")
 
@@ -84,8 +96,14 @@ def _request(command: str) -> str:
 
     base_url = _target[0]
     url = f"{base_url}/{command.lstrip('/')}"
-    response = _session.get(url, timeout=_timeout)
-    response.raise_for_status()
+    try:
+        response = _session.get(url, timeout=_timeout)
+        response.raise_for_status()
+    except requests.RequestException as exc:
+        _emit_status("ERROR", f"{base_url} ({exc.__class__.__name__})")
+        raise
+
+    _emit_status("OK", base_url)
     return response.text.strip()
 
 
