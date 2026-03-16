@@ -72,6 +72,7 @@ class ConfigGUI:
         self.process_handle = None
         self.output_queue = queue.Queue()
         self.profile_combo = None
+        self.scene_combo = None
         self.webapi_status_label = None
         self.reastream_status_label = None
         self.master_meter_label = None
@@ -160,6 +161,11 @@ class ConfigGUI:
         self.config.setdefault("tracks", {})
         self.config.setdefault("analysis_settings", {})
         self.config.setdefault("run_settings", {})
+        self.config.setdefault("lineup", {})
+
+        lineup = self.config["lineup"]
+        lineup.setdefault("active_scene", "")
+        lineup.setdefault("scenes", {})
 
         run = self.config["run_settings"]
         run.setdefault("profile", "worship")
@@ -309,6 +315,9 @@ class ConfigGUI:
         self.run_vars["analysis_interval"] = tk.DoubleVar(value=float(run.get("analysis_interval", 5.0)))
         self.run_vars["verbose"] = tk.BooleanVar(value=bool(run.get("verbose", True)))
         self.run_vars["reastream"] = tk.BooleanVar(value=bool(run.get("reastream", True)))
+        lineup_cfg = self.config.get("lineup", {}) if isinstance(self.config.get("lineup", {}), dict) else {}
+        initial_scene = str(lineup_cfg.get("active_scene", "")).strip()
+        self.run_vars["active_scene"] = tk.StringVar(value=initial_scene)
 
         ttk.Label(run_box, text="Profile").grid(row=0, column=0, sticky="w")
         self.profile_combo = ttk.Combobox(
@@ -343,8 +352,19 @@ class ConfigGUI:
         ttk.Label(run_box, text="ReaStream Port").grid(row=4, column=2, sticky="w", pady=(6, 0))
         ttk.Entry(run_box, textvariable=self.run_vars["reastream_port"], width=14).grid(row=4, column=3, sticky="w", padx=8, pady=(6, 0))
 
-        ttk.Checkbutton(run_box, text="Use ReaStream", variable=self.run_vars["reastream"]).grid(row=5, column=0, sticky="w", pady=(8, 0))
-        ttk.Checkbutton(run_box, text="Verbose (required for telemetry)", variable=self.run_vars["verbose"]).grid(row=5, column=2, columnspan=2, sticky="w", pady=(8, 0))
+        ttk.Label(run_box, text="Lineup scene").grid(row=5, column=0, sticky="w", pady=(6, 0))
+        self.scene_combo = ttk.Combobox(
+            run_box,
+            textvariable=self.run_vars["active_scene"],
+            values=self._load_scene_names(),
+            width=18,
+            state="normal",
+        )
+        self.scene_combo.grid(row=5, column=1, sticky="w", padx=8, pady=(6, 0))
+        ttk.Button(run_box, text="Refresh", command=self._refresh_scene_options).grid(row=5, column=2, sticky="w", pady=(6, 0))
+
+        ttk.Checkbutton(run_box, text="Use ReaStream", variable=self.run_vars["reastream"]).grid(row=6, column=0, sticky="w", pady=(8, 0))
+        ttk.Checkbutton(run_box, text="Verbose (required for telemetry)", variable=self.run_vars["verbose"]).grid(row=6, column=2, columnspan=2, sticky="w", pady=(8, 0))
 
     def _load_profile_names(self):
         profiles_path = _app_dir() / "learning" / "profiles.json"
@@ -377,6 +397,26 @@ class ConfigGUI:
         current = str(self.run_vars["profile"].get()).strip()
         if not current and values:
             self.run_vars["profile"].set(values[0])
+
+    def _load_scene_names(self):
+        lineup_cfg = self.config.get("lineup", {}) if isinstance(self.config.get("lineup", {}), dict) else {}
+        scenes_cfg = lineup_cfg.get("scenes", {}) if isinstance(lineup_cfg.get("scenes", {}), dict) else {}
+        names = sorted(str(name) for name in scenes_cfg.keys())
+        current = str(self.run_vars.get("active_scene", tk.StringVar(value="")).get()).strip()
+        if current and current not in names:
+            names.insert(0, current)
+        if not names:
+            return [""]
+        return names
+
+    def _refresh_scene_options(self):
+        if self.scene_combo is None:
+            return
+        values = self._load_scene_names()
+        self.scene_combo["values"] = values
+        current = str(self.run_vars["active_scene"].get()).strip()
+        if not current and values:
+            self.run_vars["active_scene"].set(values[0])
 
     def _infer_band_label_for_track(self, track_name):
         name = str(track_name or "").strip().lower()
@@ -984,6 +1024,13 @@ class ConfigGUI:
             "analysis_interval": float(self.run_vars["analysis_interval"].get()),
             "verbose": bool(self.run_vars["verbose"].get()),
         }
+
+        lineup_cfg = cfg.get("lineup", {}) if isinstance(cfg.get("lineup", {}), dict) else {}
+        scenes_cfg = lineup_cfg.get("scenes", {}) if isinstance(lineup_cfg.get("scenes", {}), dict) else {}
+        cfg["lineup"] = {
+            "active_scene": str(self.run_vars["active_scene"].get()).strip(),
+            "scenes": scenes_cfg,
+        }
         return cfg
 
     def _save_config(self):
@@ -991,6 +1038,7 @@ class ConfigGUI:
             self.config = self._collect_config_from_ui()
             save_config(self.config, CONFIG_FILE)
             self._refresh_profile_options()
+            self._refresh_scene_options()
             self.status_label.config(text="[OK] Config saved", foreground="green")
         except Exception as exc:
             self.status_label.config(text=f"[ERROR] {exc}", foreground="red")

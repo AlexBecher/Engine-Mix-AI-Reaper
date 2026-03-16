@@ -48,6 +48,7 @@ if not np.isfinite(SILENCE_FLOOR_RMS) or SILENCE_FLOOR_RMS < 0.0 or SILENCE_FLOO
 TRACK_CURRENT_DB = dict(TRACK_CONFIG_FADER_DB)
 TRACK_ERROR_EMA = {}
 TRACK_ROLE_BY_ID = {}
+ACTIVE_LINEUP_SCENE = ""
 
 PERCEPTUAL_BAND_KEYS = tuple(f"p{int(round(float(hz)))}" for hz in DEFAULT_GAMMATONE_CENTERS_HZ)
 METER_DB_FLOOR = -24.0
@@ -91,7 +92,21 @@ ACTIVE_STEM_TRACK_MAP = dict(DEFAULT_STEM_TRACK_MAP)
 def _is_dry_run_enabled(debug=False):
     raw_value = os.environ.get("MIX_ROBO_DRY_RUN")
     if raw_value is None:
-        return bool(debug)
+        return False
+    return str(raw_value).strip().lower() not in {"", "0", "false", "no", "off"}
+
+
+def _is_cut_first_enabled():
+    raw_value = os.environ.get("MIX_ROBO_CUT_FIRST")
+    if raw_value is None:
+        return True
+    return str(raw_value).strip().lower() not in {"", "0", "false", "no", "off"}
+
+
+def _is_vocal_focus_enabled():
+    raw_value = os.environ.get("MIX_ROBO_VOCAL_FOCUS")
+    if raw_value is None:
+        return False
     return str(raw_value).strip().lower() not in {"", "0", "false", "no", "off"}
 
 def _clamp(value, minimum=0.0, maximum=1.0):
@@ -148,6 +163,24 @@ def _build_track_map_from_config(config):
     tracks_cfg = config.get("tracks", {})
     master = int(config.get("master_track", 153))
 
+    lineup_cfg = config.get("lineup", {}) if isinstance(config.get("lineup", {}), dict) else {}
+    active_scene_name = str(lineup_cfg.get("active_scene", "")).strip()
+    scenes_cfg = lineup_cfg.get("scenes", {}) if isinstance(lineup_cfg.get("scenes", {}), dict) else {}
+    active_scene = scenes_cfg.get(active_scene_name, {}) if active_scene_name else lineup_cfg
+    if not isinstance(active_scene, dict):
+        active_scene = {}
+
+    present_roles = None
+    present_roles_raw = active_scene.get("present_roles")
+    if isinstance(present_roles_raw, (list, tuple, set)) and present_roles_raw:
+        present_roles = {str(role).strip().lower() for role in present_roles_raw if str(role).strip()}
+
+    band_targets_override = active_scene.get("band_targets", {})
+    if not isinstance(band_targets_override, dict):
+        band_targets_override = {}
+
+    lineup_scene_enabled = bool(active_scene_name) or bool(present_roles) or bool(band_targets_override)
+
     enabled_tracks = []
     normalized_names = {}
     for track_id_str, track_data in tracks_cfg.items():
@@ -165,6 +198,11 @@ def _build_track_map_from_config(config):
         normalized_names[track_id] = _normalize_track_name(track_data.get("name", ""))
 
     enabled_tracks = sorted(set(enabled_tracks))
+
+    def _role_allowed(role):
+        if present_roles is None:
+            return True
+        return str(role).strip().lower() in present_roles
 
     def _find_track(aliases):
         for tid in enabled_tracks:
@@ -196,25 +234,44 @@ def _build_track_map_from_config(config):
                 out.append(value)
         return out
 
-    drums = _find_track(["drums", "drum", "bateria"]) or _fallback(0)
-    bass = _find_track(["bass", "baixo"]) or _fallback(1) or drums
+    drums = _find_track(["drums", "drum", "bateria"])
+    if drums is None and _role_allowed("drums"):
+        drums = _fallback(0)
+
+    bass = _find_track(["bass", "baixo"])
+    if bass is None and _role_allowed("bass"):
+        bass = _fallback(1)
+    if bass is None and _role_allowed("bass"):
+        bass = drums
 
     key_aliases = ["keys", "key", "piano", "teclado", "synth", "pad", "kbd"]
     vocal_aliases = ["vocals", "vocal", "voz", "lead", "vox"]
 
-    keys = _find_track(key_aliases) or _fallback(2) or drums
+    keys = _find_track(key_aliases)
+    if keys is None and _role_allowed("piano"):
+        keys = _fallback(2)
+    if keys is None and _role_allowed("piano"):
+        keys = drums
     keys_layers = _find_tracks(key_aliases)
 
-    vocals = _find_track(vocal_aliases) or _fallback(3) or keys or drums
+    vocals = _find_track(vocal_aliases)
+    if vocals is None and _role_allowed("vocals"):
+        vocals = _fallback(3)
+    if vocals is None and _role_allowed("vocals"):
+        vocals = keys or drums
 
     backing_vocals = _find_tracks(["back", "backing", "bv", "choir", "coro"])
     for tid in enabled_tracks:
         if _is_backing_vocal_name(normalized_names.get(tid, "")) and tid not in backing_vocals:
             backing_vocals.append(tid)
 
-    guitar = _find_track(["guitar", "gtr", "guitarra", "violao"]) or _fallback(4)
+    guitar = _find_track(["guitar", "gtr", "guitarra", "violao"])
+    if guitar is None and _role_allowed("guitar"):
+        guitar = _fallback(4)
 
-    other = _find_track(["other", "outros", "fx", "sfx"]) or guitar or keys
+    other = _find_track(["other", "outros", "fx", "sfx"])
+    if other is None and _role_allowed("other"):
+        other = guitar or keys
 
 
     # -------- TARGET GROUPS --------
@@ -226,6 +283,7 @@ def _build_track_map_from_config(config):
     guitar_targets = _unique([guitar])
 
     air_targets = _unique(drum_targets + vocal_targets)
+    vocal_focus_enabled = _is_vocal_focus_enabled()
 
 
     # -------- DYNAMIC MAP --------
@@ -251,41 +309,85 @@ def _build_track_map_from_config(config):
         "p320": _unique(guitar_targets + key_targets),
 
         # MID
-        "p640": _unique(key_targets + vocal_targets),
+        "p640": vocal_targets if vocal_focus_enabled else _unique(key_targets + vocal_targets),
 
         # VOCAL BODY
         "p1200": vocal_targets,
 
         # PRESENCE
-        "p2500": _unique(vocal_targets + guitar_targets),
+        "p2500": vocal_targets if vocal_focus_enabled else _unique(vocal_targets + guitar_targets),
 
         # ATTACK
-        "p5000": _unique(drum_targets + vocal_targets),
+        "p5000": vocal_targets if vocal_focus_enabled else _unique(drum_targets + vocal_targets),
 
         # AIR
-        "p10000": air_targets,
+        "p10000": vocal_targets if vocal_focus_enabled else air_targets,
         "p20000": drum_targets,
     }
+
+    role_targets = {
+        "drums": drum_targets,
+        "bass": bass_targets,
+        "piano": key_targets,
+        "vocals": _unique([vocals]),
+        "backing_vocals": _unique(backing_vocals),
+        "guitar": guitar_targets,
+        "other": _unique([other]),
+    }
+
+    if band_targets_override:
+        for band, spec in band_targets_override.items():
+            if not isinstance(spec, (list, tuple)):
+                continue
+            custom_targets = []
+            for token in spec:
+                if isinstance(token, int):
+                    candidate = int(token)
+                    if candidate != master and candidate in enabled_tracks:
+                        custom_targets.append(candidate)
+                    continue
+
+                token_str = str(token).strip().lower()
+                if not token_str:
+                    continue
+                if token_str in role_targets:
+                    custom_targets.extend(role_targets[token_str])
+                    continue
+                try:
+                    candidate = int(token_str)
+                except ValueError:
+                    continue
+                if candidate != master and candidate in enabled_tracks:
+                    custom_targets.append(candidate)
+
+            dynamic_map[str(band)] = _unique(custom_targets)
+
     # Avoid empty targets for any band/stem key expected by processing paths.
     for key, fallback in DEFAULT_STEM_TRACK_MAP.items():
         value = dynamic_map.get(key)
         if value is None:
-            dynamic_map[key] = fallback
+            if lineup_scene_enabled:
+                dynamic_map[key] = [] if isinstance(fallback, list) else None
+            else:
+                dynamic_map[key] = fallback
             continue
         if isinstance(value, list) and not value:
-            dynamic_map[key] = fallback
+            if not lineup_scene_enabled:
+                dynamic_map[key] = fallback
 
     return dynamic_map
 
 def _reload_config():
     """Reload configuration from config.json - useful for hot-reloading."""
     global _config, MASTER_TRACK, TRACK_DB_LIMITS, TRACK_CONFIG_FADER_DB
-    global ENABLED_TRACKS, ACTIVE_STEM_TRACK_MAP, TRACK_ROLE_BY_ID
+    global ENABLED_TRACKS, ACTIVE_STEM_TRACK_MAP, TRACK_ROLE_BY_ID, ACTIVE_LINEUP_SCENE
     global LUFS_WARNING_THRESHOLD, ERROR_GAIN_UP, ERROR_GAIN_DOWN
     global MAX_STEP_UP_DB, MAX_STEP_DOWN_DB, ERROR_DEADBAND, MAX_TRACKS_RAISE_PER_CYCLE
     global SILENCE_FLOOR_RMS
     
     _config = load_config()
+    lineup_cfg = _config.get("lineup", {}) if isinstance(_config.get("lineup", {}), dict) else {}
+    ACTIVE_LINEUP_SCENE = str(lineup_cfg.get("active_scene", "")).strip()
     configure_from_config(_config)
     ACTIVE_STEM_TRACK_MAP = _build_track_map_from_config(_config)
     TRACK_ROLE_BY_ID = _build_track_roles_from_config(_config)
@@ -390,7 +492,9 @@ def _command_track(track, delta_db, error_magnitude=0.0, debug=False):
             f"step_up={step_up:.2f} step_down={step_down:.2f} applied={command_db:+.2f}dB "
             f"transport=WEB_API"
         )
-
+    # ... lógica que define 'command_db' a partir de step_up/step_down ...
+    # GARANTIA: nunca sair dos limites da trilha
+    command_db = max(min_db, min(command_db, max_db))
     return command_db
 
 
@@ -461,6 +565,9 @@ ROLE_BAND_INFLUENCE = {
     },
 }
 
+VOCAL_PRESENCE_BANDS = ("p1200", "p2500", "p5000", "p10000")
+P640_SINGLE_NEG_DAMPING = 0.45
+
 
 def _role_weight_for_band(role, band):
     base = INSTRUMENT_PRIORITY.get(role, 1.0)
@@ -494,6 +601,24 @@ def _smooth_track_error(track, error):
 
 def _apply_actions(actions, track_map, debug=False, dry_run=False):
     """Aggregate band errors per track and apply one coherent command per cycle."""
+    presence_positive_count = sum(
+        1
+        for band, error in actions
+        if band in VOCAL_PRESENCE_BANDS and float(error) > ERROR_DEADBAND
+    )
+    p640_is_negative = any(band == "p640" and float(error) < -ERROR_DEADBAND for band, error in actions)
+    other_negative_presence = any(
+        band in VOCAL_PRESENCE_BANDS and float(error) < -ERROR_DEADBAND
+        for band, error in actions
+    )
+    damp_p640_for_vocals = p640_is_negative and (not other_negative_presence) and (presence_positive_count >= 2)
+
+    if debug and damp_p640_for_vocals:
+        print(
+            "[DIAG] p640 negative damped for vocals/backing "
+            f"(presence positives={presence_positive_count}, factor={P640_SINGLE_NEG_DAMPING:.2f})"
+        )
+
     track_errors = {}
     for band, error in actions:
         tracks = _resolve_tracks_for_band(track_map, band)
@@ -510,6 +635,15 @@ def _apply_actions(actions, track_map, debug=False, dry_run=False):
             shared_weight = 1.0 / max(1.0, np.sqrt(float(len(tracks))))
             weight = _role_weight_for_band(role, band) * shared_weight
             weighted_error = float(error) * weight
+
+            if (
+                damp_p640_for_vocals
+                and band == "p640"
+                and role in ("vocals", "backing_vocals")
+                and weighted_error < 0.0
+            ):
+                weighted_error *= P640_SINGLE_NEG_DAMPING
+
             # >>> LOW-END BOOST DAMPER (anti-boost de graves)
             # Se o erro for POSITIVO (pede BOOST) e a banda estiver no "low end",
             # atenuamos o empurrão para evitar que baixo/bumbo disparem.
@@ -532,8 +666,9 @@ def _apply_actions(actions, track_map, debug=False, dry_run=False):
         }
 
     # Se existir qualquer corte relevante, congelar boosts neste ciclo
+    cut_first_enabled = _is_cut_first_enabled()
     has_strong_cut = any(abs(v["agg_neg"]) >= (ERROR_DEADBAND * 1.2) for v in pending.values())
-    allow_boosts = not has_strong_cut
+    allow_boosts = (not cut_first_enabled) or (not has_strong_cut)
 
     raised_tracks = 0
     for t in sorted(pending.keys()):
@@ -739,6 +874,12 @@ def process(audio, sample_rate=SAMPLE_RATE, profile_name=None,
         print(f"[process] Starting audio analysis (shape={audio.shape}, duration={len(audio)/sample_rate:.2f}s)")
     if dry_run:
         print("[DIAG] DRY-RUN enabled: REAPER writes disabled for this cycle")
+    if debug and not _is_cut_first_enabled():
+        print("[DIAG] CUT-FIRST disabled: boosts allowed even when cuts are present")
+    if debug and _is_vocal_focus_enabled():
+        print("[DIAG] VOCAL-FOCUS enabled: p640/p1200/p2500/p5000/p10000 mapped only to vocals/backing")
+    if debug and ACTIVE_LINEUP_SCENE:
+        print(f"[DIAG] Active lineup scene: {ACTIVE_LINEUP_SCENE}")
 
     lufs = None
     try:
@@ -813,6 +954,12 @@ def process_stems(stems, profile_name=None, profiles_path="learning/profiles.jso
         print(f"Using stem->track map: {stem_track_map}")
     if dry_run:
         print("[DIAG] DRY-RUN enabled: REAPER writes disabled for this cycle")
+    if verbose and not _is_cut_first_enabled():
+        print("[DIAG] CUT-FIRST disabled: boosts allowed even when cuts are present")
+    if verbose and _is_vocal_focus_enabled():
+        print("[DIAG] VOCAL-FOCUS enabled: p640/p1200/p2500/p5000/p10000 mapped only to vocals/backing")
+    if verbose and ACTIVE_LINEUP_SCENE:
+        print(f"[DIAG] Active lineup scene: {ACTIVE_LINEUP_SCENE}")
 
     profiles = _load_profiles(profiles_path)
     profile = profiles.get(profile_name, {}) if profile_name else {}

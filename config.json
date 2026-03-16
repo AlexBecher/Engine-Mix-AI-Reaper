@@ -52,12 +52,12 @@
     }
   },
   "analysis_settings": {
-    "error_gain_up": 1.0,
-    "error_gain_down": 1.8,
-    "max_step_up_db": 0.2,
-    "max_step_down_db": 0.45,
-    "error_deadband": 0.12,
-    "max_tracks_raise_per_cycle": 7,
+    "error_gain_up": 1.6,
+    "error_gain_down": 2.2,
+    "max_step_up_db": 0.8,
+    "max_step_down_db": 1.2,
+    "error_deadband": 0.07,
+    "max_tracks_raise_per_cycle": 2,
     "lufs_warning_threshold": -10.0,
     "silence_floor_rms": 5e-07
   },
@@ -74,5 +74,110 @@
     "channels": 2,
     "analysis_interval": 0.8,
     "verbose": true
+  },
+  "lineup": {
+    "active_scene": "igreja_light",
+    "scenes": {
+      "igreja_light": {
+        "present_roles": [
+          "vocals",
+          "backing_vocals",
+          "drums",
+          "piano",
+          "guitar"
+        ],
+        "band_targets": {
+          "p640": [
+            "vocals",
+            "backing_vocals"
+          ],
+          "p1200": [
+            "vocals",
+            "backing_vocals"
+          ],
+          "p2500": [
+            "vocals",
+            "backing_vocals"
+          ],
+          "p5000": [
+            "vocals",
+            "backing_vocals"
+          ],
+          "p10000": [
+            "vocals",
+            "backing_vocals"
+          ]
+        }
+      },
+      "full_band": {
+        "present_roles": [
+          "vocals",
+          "backing_vocals",
+          "drums",
+          "bass",
+          "piano",
+          "guitar",
+          "other"
+        ]
+      },
+      
+      "voz_vocals_drum_key": {
+          "present_roles": ["vocals","backing_vocals","drums","piano"],   
+          "band_targets": {
+            "p80":   ["drums"],                 
+            "p160":  ["drums"],                
+            "p320":  ["piano"],                
+            "p640":  ["vocals","backing_vocals"],
+            "p1200": ["vocals","backing_vocals"],
+            "p2500": ["vocals","backing_vocals"],
+            "p5000": ["vocals","backing_vocals"],
+            "p10000":["vocals","backing_vocals"]
+          }
+        },
+
+        "voz_guitar_key_drum": {
+          "present_roles": ["vocals","drums","piano","guitar"], 
+          "band_targets": {
+            "p320":  ["piano","guitar"],       
+            "p2500": ["vocals","guitar"],    
+            "p5000": ["vocals"],
+            "p10000":["vocals"]
+          }
+        },
+          "bass_key_voz_drum": {
+            "present_roles": [
+              "vocals",
+              "backing_vocals",
+              "drums",
+              "piano",
+              "bass"
+            ],
+            "band_targets": {
+              
+              "p20":   ["bass"],
+              "p40":   ["bass"],
+              "p80":   ["bass", "drums"],
+              "p160":  ["drums"],
+
+              
+              "p320":  ["piano"],
+
+              
+              "p640":   ["vocals", "backing_vocals"],
+              "p1200":  ["vocals", "backing_vocals"],
+              "p2500":  ["vocals", "backing_vocals"],
+
+              
+              "p5000":  ["vocals", "backing_vocals"],
+              "p10000": ["vocals", "backing_vocals"],
+
+             
+              "p20000": ["drums"]
+            }
+          }
+        
+
+
+    }
   }
 }

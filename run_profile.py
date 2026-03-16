@@ -28,7 +28,7 @@ from mix_profile import process, process_stems
 
 DEFAULT_WASAPI_DEVICE_NAME = "Speakers (USB AUDIO DEVICE)"
 DEFAULT_LIVE_BLOCKSIZE = 4096
-DEFAULT_REASTREAM_HOST = "10.0.0.111"
+DEFAULT_REASTREAM_HOST = "0.0.0.0"
 DEFAULT_REASTREAM_PORT = 58710
 DEFAULT_REASTREAM_IDENTIFIER = "master"
 DEFAULT_REASTREAM_BUFFER_SIZE = 65536
@@ -164,6 +164,35 @@ def load_stems(stems_dir, stem_names=None, sample_rate=44100):
     return stems
 
 
+def load_test_audio(path, sample_rate=44100, channels=2):
+    audio, sr = sf.read(path, dtype="float32")
+
+    audio = np.asarray(audio, dtype=np.float32)
+    if audio.ndim == 1:
+        audio = audio.reshape(-1, 1)
+
+    if sr != sample_rate:
+        factor = sample_rate / sr
+        indices = (np.arange(int(audio.shape[0] * factor)) / factor).astype(int)
+        indices = np.clip(indices, 0, max(0, audio.shape[0] - 1))
+        audio = audio[indices]
+
+    if channels <= 0:
+        channels = 1
+
+    if audio.shape[1] > channels:
+        audio = audio[:, :channels]
+    elif audio.shape[1] < channels:
+        if audio.shape[1] == 1:
+            audio = np.repeat(audio, channels, axis=1)
+        else:
+            pad_count = channels - audio.shape[1]
+            pad = np.repeat(audio[:, -1:], pad_count, axis=1)
+            audio = np.concatenate([audio, pad], axis=1)
+
+    return np.array(audio, dtype=np.float32, copy=False)
+
+
 def main():
     parser = argparse.ArgumentParser(description="Run mix profile on separated stems.")
     parser.add_argument("--profile", required=True, help="Profile name (from learning/profiles.json)")
@@ -199,6 +228,22 @@ def main():
         help=(
             "Use UDP ReaStream capture instead of sounddevice input stream. "
             "This mode listens on --reastream-host/--reastream-port and filters by --reastream-identifier."
+        ),
+    )
+    parser.add_argument(
+        "--test-audio",
+        help=(
+            "Path to a WAV file used as a simulated live input. "
+            "This bypasses ReaStream and feeds the file through the same analysis pipeline for testing."
+        ),
+    )
+    parser.add_argument(
+        "--test-speed",
+        type=float,
+        default=0.0,
+        help=(
+            "Playback speed for --test-audio. "
+            "0 runs as fast as possible, 1.0 emulates real time, 2.0 runs 2x faster."
         ),
     )
     parser.add_argument(
@@ -320,8 +365,17 @@ def main():
     if args.reastream:
         args.live = True
 
+    if args.test_audio:
+        args.live = True
+
     if args.live:
         use_reastream = args.reastream
+        use_test_audio = bool(args.test_audio)
+
+        if use_test_audio and "MIX_ROBO_CUT_FIRST" not in os.environ:
+            os.environ["MIX_ROBO_CUT_FIRST"] = "0"
+        if use_test_audio and "MIX_ROBO_VOCAL_FOCUS" not in os.environ:
+            os.environ["MIX_ROBO_VOCAL_FOCUS"] = "1"
 
         if use_reastream:
             print(
@@ -330,11 +384,17 @@ def main():
                 f"identifier={args.reastream_identifier!r}"
             )
 
+        if use_test_audio and use_reastream:
+            raise SystemExit("--test-audio nao pode ser usado junto com --reastream.")
+
         if use_reastream and args.loopback:
             raise SystemExit("--loopback nao pode ser usado junto com --reastream.")
 
+        if use_test_audio and args.loopback:
+            raise SystemExit("--test-audio nao pode ser usado junto com --loopback.")
+
         sd = None
-        if not use_reastream:
+        if not use_reastream and not use_test_audio:
             try:
                 import sounddevice as sd
             except ImportError:
@@ -345,9 +405,10 @@ def main():
         # If no explicit map is provided:
         # - In ReaStream mode, use None so mix_profile falls back to DEFAULT_STEM_TRACK_MAP
         #   (each band routed to its respective instrument track).
+        # - In test-audio mode, do the same to emulate the default live ReaStream routing.
         # - In WASAPI/loopback mode, map all bands to the single live-track.
         if track_map is None:
-            if use_reastream:
+            if use_reastream or use_test_audio:
                 track_map = None  # let mix_profile.process() use DEFAULT_STEM_TRACK_MAP
             else:
                 track_map = {
@@ -387,7 +448,7 @@ def main():
             return None
 
         device = None
-        if not use_reastream:
+        if not use_reastream and not use_test_audio:
             if args.device is not None:
                 # allow numeric device index or name
                 try:
@@ -404,6 +465,10 @@ def main():
                     f"({args.reastream_host}:{args.reastream_port}, "
                     f"identifier={args.reastream_identifier!r})."
                 )
+            elif use_test_audio:
+                print(f"Starting simulated live input from WAV: {args.test_audio}")
+                print("[TEST MODE] CUT-FIRST disabled for calibration")
+                print("[TEST MODE] VOCAL-FOCUS enabled for calibration")
             else:
                 print(f"Starting live capture (device={device!r}).")
             print(f"Using track map: {track_map}")
@@ -442,34 +507,13 @@ def main():
                 f"(min {min_samples_for_analysis} samples) para cada ajuste."
             )
 
-        def _buffer_and_maybe_process(frames):
-            if frames is None:
-                return
-
-            frame_array = np.asarray(frames)
-            if frame_array.ndim == 1:
-                frame_array = frame_array.reshape(-1, 1)
-            if frame_array.size == 0 or frame_array.shape[0] <= 0:
-                return
-
-            # Copy to detach from sounddevice callback buffer lifecycle.
-            frame_array = np.array(frame_array, dtype=np.float32, copy=True)
-
-            now = time.monotonic()
+        def _process_pending_windows(now, force=False):
             if channel_map:
                 for ch_idx, track in channel_map.items():
-                    if ch_idx < 0 or ch_idx >= frame_array.shape[1]:
-                        continue
-
-                    channel_audio = frame_array[:, ch_idx]
-                    analysis_state["channel_chunks"].setdefault(ch_idx, []).append(channel_audio)
-                    analysis_state["channel_samples"][ch_idx] = (
-                        analysis_state["channel_samples"].get(ch_idx, 0) + channel_audio.shape[0]
-                    )
                     analysis_state["channel_last"].setdefault(ch_idx, now)
 
                     elapsed = now - analysis_state["channel_last"][ch_idx]
-                    if elapsed < args.analysis_interval:
+                    if not force and elapsed < args.analysis_interval:
                         continue
                     if analysis_state["channel_samples"].get(ch_idx, 0) < min_samples_for_analysis:
                         continue
@@ -495,11 +539,8 @@ def main():
                     _process_audio(window_audio, band_map)
                 return
 
-            analysis_state["stereo_chunks"].append(frame_array)
-            analysis_state["stereo_samples"] += frame_array.shape[0]
-
             elapsed = now - analysis_state["stereo_last"]
-            if elapsed < args.analysis_interval:
+            if not force and elapsed < args.analysis_interval:
                 return
             if analysis_state["stereo_samples"] < min_samples_for_analysis:
                 return
@@ -516,13 +557,68 @@ def main():
                 )
             _process_audio(window_audio, track_map)
 
+        def _buffer_and_maybe_process(frames, now=None, force=False):
+            current_time = time.monotonic() if now is None else float(now)
+
+            if frames is not None:
+                frame_array = np.asarray(frames)
+                if frame_array.ndim == 1:
+                    frame_array = frame_array.reshape(-1, 1)
+                if frame_array.size > 0 and frame_array.shape[0] > 0:
+                    # Copy to detach from callback/file buffer lifecycle.
+                    frame_array = np.array(frame_array, dtype=np.float32, copy=True)
+
+                    if channel_map:
+                        for ch_idx in channel_map.keys():
+                            if ch_idx < 0 or ch_idx >= frame_array.shape[1]:
+                                continue
+                            channel_audio = frame_array[:, ch_idx]
+                            analysis_state["channel_chunks"].setdefault(ch_idx, []).append(channel_audio)
+                            analysis_state["channel_samples"][ch_idx] = (
+                                analysis_state["channel_samples"].get(ch_idx, 0) + channel_audio.shape[0]
+                            )
+                    else:
+                        analysis_state["stereo_chunks"].append(frame_array)
+                        analysis_state["stereo_samples"] += frame_array.shape[0]
+
+            _process_pending_windows(current_time, force=force)
+
         def _callback(indata, frames, time_info, status):
             if status and args.verbose:
                 print("Audio status:", status)
 
             _buffer_and_maybe_process(indata)
 
-        if use_reastream:
+        if use_test_audio:
+            test_audio = load_test_audio(args.test_audio, sample_rate=args.sr, channels=args.channels)
+            total_samples = int(test_audio.shape[0])
+            duration_seconds = (total_samples / float(args.sr)) if args.sr > 0 else 0.0
+
+            if total_samples <= 0:
+                raise SystemExit(f"Arquivo de teste sem audio utilizavel: {args.test_audio}")
+
+            try:
+                print(
+                    f"Simulating live audio from {args.test_audio} "
+                    f"({duration_seconds:.2f}s, {test_audio.shape[1]} ch)... press Ctrl+C to stop."
+                )
+                simulated_now = time.monotonic()
+                for start in range(0, total_samples, max(1, args.blocksize)):
+                    stop = min(total_samples, start + max(1, args.blocksize))
+                    chunk = test_audio[start:stop]
+                    _buffer_and_maybe_process(chunk, now=simulated_now)
+
+                    chunk_duration = chunk.shape[0] / float(args.sr)
+                    simulated_now += chunk_duration
+
+                    if args.test_speed and args.test_speed > 0.0:
+                        time.sleep(chunk_duration / args.test_speed)
+
+                _buffer_and_maybe_process(None, now=simulated_now + args.analysis_interval, force=True)
+                print("Simulated live audio finished.")
+            except KeyboardInterrupt:
+                print("Simulated live capture stopped.")
+        elif use_reastream:
             ident = (args.reastream_identifier or "").strip()
             if ident.lower() == "any":
                 ident = ""
