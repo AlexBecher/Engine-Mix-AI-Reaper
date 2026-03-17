@@ -84,6 +84,73 @@ def get_analysis_settings(config=None):
         "max_step_down_db": 0.35,
         "error_deadband": 0.18,
         "max_tracks_raise_per_cycle": 1,
-        "lufs_warning_threshold": -14
+        "lufs_warning_threshold": -14,
+        "silence_floor_rms": 1e-6,
+        "control_blend_spec": 0.78,
+        "control_blend_lufs": 0.22,
+        "level_gain": 0.45,
+        "level_error_clip_db": 6.0,
+        "level_source": "lufs",
+        "level_role_targets_lufs": {
+            "vocals": -18.0,
+            "backing_vocals": -22.0,
+            "piano": -23.0,
+            "bass": -20.0,
+            "drums": -20.0,
+            "other": -23.0,
+        },
+        "level_role_targets_rms": {
+            "vocals": -18.0,
+            "backing_vocals": -22.0,
+            "piano": -23.0,
+            "bass": -20.0,
+            "drums": -20.0,
+            "other": -23.0,
+        },
     }
-    return config.get("analysis_settings", defaults)
+    raw_settings = config.get("analysis_settings", {})
+    if not isinstance(raw_settings, dict):
+        raw_settings = {}
+
+    merged = dict(defaults)
+    merged.update(raw_settings)
+    return merged
+
+
+def get_dry_run_settings(config=None):
+    """Get DRY-RUN settings."""
+    if config is None:
+        config = load_config()
+    
+    dry_run_cfg = config.get("dry_run_settings", {})
+    return {
+        "enabled": dry_run_cfg.get("enabled", False),
+        "audio_source": dry_run_cfg.get("audio_source", "reastream"),
+        "file_path": dry_run_cfg.get("file_path", ""),
+        "loop_count": dry_run_cfg.get("loop_count", 1),
+        "device_id": dry_run_cfg.get("device_id", None),
+        "device_name": dry_run_cfg.get("device_name", ""),
+        "sample_rate": dry_run_cfg.get("sample_rate", 44100),
+        "blocksize": dry_run_cfg.get("blocksize", 4096),
+        "channels": dry_run_cfg.get("channels", 2),
+    }
+
+
+def set_dry_run_settings(dry_run_settings, config=None, config_path=CONFIG_FILE):
+    """Update DRY-RUN settings in config."""
+    if config is None:
+        config = load_config(config_path)
+    
+    if "dry_run_settings" not in config:
+        config["dry_run_settings"] = {}
+    
+    config["dry_run_settings"].update(dry_run_settings)
+    save_config(config, config_path)
+
+
+def is_dry_run_enabled(config=None):
+    """Check if DRY-RUN is enabled."""
+    if config is None:
+        config = load_config()
+    
+    return config.get("dry_run_settings", {}).get("enabled", False)

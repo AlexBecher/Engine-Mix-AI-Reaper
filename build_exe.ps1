@@ -19,14 +19,44 @@ if (-not $python) {
 
 Write-Host "Using Python from: $python"
 
-$iconPath = Join-Path $root "icon.png"
-$faderPath = Join-Path $root "fader.png"
-$faderBottomPath = Join-Path $root "fader_buttom.png"
+# Ensure PyInstaller can detect and bundle tkinter/Tcl-Tk when building from venv.
+$pyBasePrefix = & $python -c "import sys; print(sys.base_prefix)"
+$tclDir = Join-Path $pyBasePrefix "tcl\tcl8.6"
+$tkDir = Join-Path $pyBasePrefix "tcl\tk8.6"
+
+if ((Test-Path (Join-Path $tclDir "init.tcl")) -and (Test-Path (Join-Path $tkDir "tk.tcl"))) {
+    $env:TCL_LIBRARY = $tclDir
+    $env:TK_LIBRARY = $tkDir
+    Write-Host "Using Tcl/Tk from: $tclDir and $tkDir"
+}
+else {
+    Write-Warning "Tcl/Tk runtime files not found under $pyBasePrefix. Build may exclude tkinter."
+}
+
+$imgDir = Join-Path $root "img"
+$iconPath = Join-Path $imgDir "icon.png"
+$faderPath = Join-Path $imgDir "fader.png"
+$faderBottomPath = Join-Path $imgDir "fader_buttom.png"
+$backPngPath = Join-Path $imgDir "back.png"
+$bassPngPath = Join-Path $imgDir "bass.png"
+$drumPngPath = Join-Path $imgDir "drum.png"
+$guitarsPngPath = Join-Path $imgDir "guitars.png"
+$keysPngPath = Join-Path $imgDir "keys.png"
+$leadPngPath = Join-Path $imgDir "lead.png"
+$checkInPngPath = Join-Path $imgDir "checkin.png"
+$checkOutPngPath = Join-Path $imgDir "checkout.png"
+$deletePngPath = Join-Path $imgDir "del.png"
+$startPngPath = Join-Path $imgDir "start.png"
+$stopPngPath = Join-Path $imgDir "stop.png"
+$savePngPath = Join-Path $imgDir "save.png"
+$learnPngPath = Join-Path $imgDir "learn.png"
+$dryPngPath = Join-Path $imgDir "dry.png"
+$applyPngPath = Join-Path $imgDir "apply.png"
 $buildAssetsDir = Join-Path $root "build"
 $iconPngBuildPath = Join-Path $buildAssetsDir "icon_256.png"
 $iconBuildPath = Join-Path $buildAssetsDir "icon_256.ico"
 
-foreach ($asset in @($iconPath, $faderPath, $faderBottomPath)) {
+foreach ($asset in @($iconPath, $faderPath, $faderBottomPath, $backPngPath, $bassPngPath, $drumPngPath, $guitarsPngPath, $keysPngPath, $leadPngPath, $checkInPngPath, $checkOutPngPath, $deletePngPath, $startPngPath, $stopPngPath, $savePngPath, $learnPngPath, $dryPngPath, $applyPngPath)) {
     if (!(Test-Path $asset)) {
         throw "Required asset not found: $asset"
     }
@@ -135,9 +165,24 @@ Invoke-PyInstaller @(
     "--name", "AlexStudioMix",
     "--windowed",
     "--icon", $iconBuildPath,
-    "--add-data", "$iconPath;.",
-    "--add-data", "$faderPath;.",
-    "--add-data", "$faderBottomPath;.",
+    "--add-data", "$iconPath;img",
+    "--add-data", "$faderPath;img",
+    "--add-data", "$faderBottomPath;img",
+    "--add-data", "$backPngPath;img",
+    "--add-data", "$bassPngPath;img",
+    "--add-data", "$drumPngPath;img",
+    "--add-data", "$guitarsPngPath;img",
+    "--add-data", "$keysPngPath;img",
+    "--add-data", "$leadPngPath;img",
+    "--add-data", "$checkInPngPath;img",
+    "--add-data", "$checkOutPngPath;img",
+    "--add-data", "$deletePngPath;img",
+    "--add-data", "$startPngPath;img",
+    "--add-data", "$stopPngPath;img",
+    "--add-data", "$savePngPath;img",
+    "--add-data", "$learnPngPath;img",
+    "--add-data", "$dryPngPath;img",
+    "--add-data", "$applyPngPath;img",
     "--hidden-import", "soundfile",
     "--hidden-import", "sounddevice",
     "--hidden-import", "pyloudnorm",
@@ -170,10 +215,30 @@ if (!(Test-Path $workerExe)) {
 # Copy worker exe into GUI app folder
 Copy-Item $workerExe "$appDir\run_profile_worker.exe" -Force
 
-# Keep image assets at dist root for straightforward runtime loading.
-Copy-Item $iconPath "$appDir\icon.png" -Force
-Copy-Item $faderPath "$appDir\fader.png" -Force
-Copy-Item $faderBottomPath "$appDir\fader_buttom.png" -Force
+# Keep image assets inside dist/img for organized runtime loading.
+$appImgDir = Join-Path $appDir "img"
+if (!(Test-Path $appImgDir)) { New-Item -ItemType Directory -Path $appImgDir | Out-Null }
+Copy-Item $iconPath "$appImgDir\icon.png" -Force
+Copy-Item $faderPath "$appImgDir\fader.png" -Force
+Copy-Item $faderBottomPath "$appImgDir\fader_buttom.png" -Force
+Copy-Item $backPngPath "$appImgDir\back.png" -Force
+Copy-Item $bassPngPath "$appImgDir\bass.png" -Force
+Copy-Item $drumPngPath "$appImgDir\drum.png" -Force
+Copy-Item $guitarsPngPath "$appImgDir\guitars.png" -Force
+Copy-Item $keysPngPath "$appImgDir\keys.png" -Force
+Copy-Item $leadPngPath "$appImgDir\lead.png" -Force
+Copy-Item $checkInPngPath "$appImgDir\checkin.png" -Force
+Copy-Item $checkOutPngPath "$appImgDir\checkout.png" -Force
+Copy-Item $deletePngPath "$appImgDir\del.png" -Force
+Copy-Item $startPngPath "$appImgDir\start.png" -Force
+Copy-Item $stopPngPath "$appImgDir\stop.png" -Force
+Copy-Item $savePngPath "$appImgDir\save.png" -Force
+Copy-Item $learnPngPath "$appImgDir\learn.png" -Force
+Copy-Item $dryPngPath "$appImgDir\dry.png" -Force
+Copy-Item $applyPngPath "$appImgDir\apply.png" -Force
+
+# Create logs folder for dry-run logs
+if (!(Test-Path "$appDir\logs")) { New-Item -ItemType Directory -Path "$appDir\logs" | Out-Null }
 
 # External editable config
 Copy-Item "$root\config.json" "$appDir\config.json" -Force

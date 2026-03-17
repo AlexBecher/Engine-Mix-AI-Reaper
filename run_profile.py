@@ -272,6 +272,28 @@ def main():
         help="Maximum UDP packet size for ReaStream receive.",
     )
     parser.add_argument(
+        "--webapi-host",
+        default=None,
+        help="Optional Web API host override for this process.",
+    )
+    parser.add_argument(
+        "--webapi-port",
+        type=int,
+        default=None,
+        help="Optional Web API port override for this process.",
+    )
+    parser.add_argument(
+        "--webapi-base",
+        default=None,
+        help="Optional Web API base path override for this process.",
+    )
+    parser.add_argument(
+        "--webapi-timeout",
+        type=float,
+        default=None,
+        help="Optional Web API timeout override for this process.",
+    )
+    parser.add_argument(
         "--device",
         help=(
             "Optional sound device name or index for live capture. "
@@ -338,6 +360,15 @@ def main():
         ),
     )
     args = parser.parse_args()
+
+    if args.webapi_host is not None:
+        os.environ["MIX_ROBO_WEBAPI_HOST"] = str(args.webapi_host).strip()
+    if args.webapi_port is not None:
+        os.environ["MIX_ROBO_WEBAPI_PORT"] = str(int(args.webapi_port))
+    if args.webapi_base is not None:
+        os.environ["MIX_ROBO_WEBAPI_BASE"] = str(args.webapi_base).strip()
+    if args.webapi_timeout is not None:
+        os.environ["MIX_ROBO_WEBAPI_TIMEOUT"] = str(float(args.webapi_timeout))
 
     args.reastream_host = _normalize_host(args.reastream_host)
     if args.analysis_interval < MIN_ANALYSIS_INTERVAL:

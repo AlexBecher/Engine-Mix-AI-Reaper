@@ -1,9 +1,11 @@
 import math
+import os
+import re
 from typing import Dict, Iterable, Optional
 
 import requests
 
-from config_manager import load_config
+from config_manager import load_config, is_dry_run_enabled
 
 
 DEFAULT_WEBAPI_HOST = "127.0.0.1"
@@ -22,6 +24,7 @@ _session: Optional[requests.Session] = None
 _target: Optional[tuple] = None
 _timeout = DEFAULT_TIMEOUT
 _last_status: Optional[tuple] = None
+_dry_run_enabled: bool = False
 
 
 def _emit_status(state: str, detail: str) -> None:
@@ -60,6 +63,15 @@ def _build_base_url(host: str, port: int, base: str) -> str:
     return f"http://{host}:{int(port)}{base}"
 
 
+def _normalize_host(host: str, fallback: str = DEFAULT_WEBAPI_HOST) -> str:
+    value = str(host or "").strip()
+    if not value:
+        return fallback
+    if value == "127.0.0.0":
+        return "127.0.0.1"
+    return value
+
+
 def _set_target(host: str, port: int, base: str, timeout: float, verbose: bool = False) -> None:
     global _session, _target, _timeout
 
@@ -84,7 +96,53 @@ def configure_from_config(config=None, verbose: bool = False) -> None:
     port = run.get("webapi_port", DEFAULT_WEBAPI_PORT)
     base = run.get("webapi_base", DEFAULT_WEBAPI_BASE)
     timeout = run.get("webapi_timeout", DEFAULT_TIMEOUT)
-    _set_target(str(host).strip(), int(port), str(base), float(timeout), verbose=verbose)
+
+    env_host = str(os.environ.get("MIX_ROBO_WEBAPI_HOST", "")).strip()
+    env_port = str(os.environ.get("MIX_ROBO_WEBAPI_PORT", "")).strip()
+    env_base = str(os.environ.get("MIX_ROBO_WEBAPI_BASE", "")).strip()
+    env_timeout = str(os.environ.get("MIX_ROBO_WEBAPI_TIMEOUT", "")).strip()
+
+    if env_host:
+        host = env_host
+    if env_port:
+        try:
+            port = int(env_port)
+        except (TypeError, ValueError):
+            pass
+    if env_base:
+        base = env_base
+    if env_timeout:
+        try:
+            timeout = float(env_timeout)
+        except (TypeError, ValueError):
+            pass
+
+    _set_target(_normalize_host(host), int(port), str(base), float(timeout), verbose=verbose)
+
+
+def set_dry_run(enabled: bool) -> None:
+    """Enable or disable DRY-RUN mode globally."""
+    global _dry_run_enabled
+    _dry_run_enabled = bool(enabled)
+    if _dry_run_enabled:
+        _emit_status("DRY-RUN", "ENABLED - Web API writes blocked")
+    else:
+        _emit_status("DRY-RUN", "DISABLED")
+
+
+def get_dry_run() -> bool:
+    """Get current DRY-RUN status."""
+    global _dry_run_enabled
+    return _dry_run_enabled
+
+
+def auto_configure_dry_run(config=None) -> None:
+    """Auto-configure DRY-RUN from config file."""
+    if config is None:
+        config = load_config()
+    
+    enabled = is_dry_run_enabled(config)
+    set_dry_run(enabled)
 
 
 def _request(command: str) -> str:
@@ -125,6 +183,48 @@ def _parse_track_name(track_raw: str) -> str:
     return "Unknown"
 
 
+_FLOAT_PATTERN = r"([+-]?(?:\d+(?:\.\d+)?|\.\d+))"
+_LUFS_PATTERN = re.compile(rf"\blufs\b\s*[:=]\s*{_FLOAT_PATTERN}", re.IGNORECASE)
+_RMS_DB_PATTERN = re.compile(rf"\brms\b\s*[:=]\s*{_FLOAT_PATTERN}\s*dB?", re.IGNORECASE)
+_RMS_GENERIC_PATTERN = re.compile(rf"\brms\b\s*[:=]\s*{_FLOAT_PATTERN}", re.IGNORECASE)
+
+
+def _parse_track_meter_payload(payload: str) -> Dict[str, float]:
+    text = str(payload or "").strip()
+    if not text:
+        return {}
+
+    out: Dict[str, float] = {}
+
+    lufs_match = _LUFS_PATTERN.search(text)
+    if lufs_match:
+        try:
+            out["lufs"] = float(lufs_match.group(1))
+        except (TypeError, ValueError):
+            pass
+
+    rms_db_match = _RMS_DB_PATTERN.search(text)
+    if rms_db_match:
+        try:
+            out["rms_db"] = float(rms_db_match.group(1))
+        except (TypeError, ValueError):
+            pass
+
+    if "rms_db" not in out:
+        rms_match = _RMS_GENERIC_PATTERN.search(text)
+        if rms_match:
+            try:
+                rms_value = float(rms_match.group(1))
+                if -120.0 <= rms_value <= 24.0:
+                    out["rms_db"] = rms_value
+                elif rms_value > 0.0:
+                    out["rms_db"] = clamp_db(20.0 * math.log10(rms_value))
+            except (TypeError, ValueError):
+                pass
+
+    return out
+
+
 def get_track_volume(track: int) -> float:
     track_raw = _request(f"TRACK/{int(track)}")
     return clamp_volume(_parse_track_volume(track_raw))
@@ -150,11 +250,18 @@ def get_track_snapshot(track: int) -> Dict[str, float | str]:
 
 
 def set_track_db(track: int, db_value: float, verbose: bool = False) -> float:
+    global _dry_run_enabled
     safe_db = clamp_db(db_value)
     volume = db_to_volume(safe_db)
-    _request(f"SET/TRACK/{int(track)}/VOL/{volume}")
-    if DEBUG or verbose:
-        print(f"[WEBAPI SET] track={int(track)} db={safe_db:+.2f} raw={volume:.6f}")
+    
+    if _dry_run_enabled:
+        if DEBUG or verbose:
+            print(f"[WEBAPI SET] [DRY-RUN] track={int(track)} db={safe_db:+.2f} raw={volume:.6f} (blocked)")
+    else:
+        _request(f"SET/TRACK/{int(track)}/VOL/{volume}")
+        if DEBUG or verbose:
+            print(f"[WEBAPI SET] track={int(track)} db={safe_db:+.2f} raw={volume:.6f}")
+    
     return safe_db
 
 
@@ -165,4 +272,43 @@ def get_tracks_db(track_ids: Iterable[int], verbose: bool = False) -> Dict[int, 
             out[int(tid)] = get_track_db(int(tid), verbose=verbose)
         except Exception:
             continue
+    return out
+
+
+def get_tracks_lufs_rms(track_ids: Iterable[int], verbose: bool = False) -> Dict[int, Dict[str, float]]:
+    """Read per-track LUFS/RMS meters from REAPER Web API when available.
+
+    The exact command support depends on the REAPER Web API setup. This helper
+    tries a few known patterns and falls back to parsing TRACK payload fields.
+    """
+    out: Dict[int, Dict[str, float]] = {}
+    for tid in track_ids:
+        track_id = int(tid)
+        meter_payload: Optional[str] = None
+        for command in (
+            f"TRACK/{track_id}/METER",
+            f"GET/TRACK/{track_id}/METER",
+            f"TRACK/{track_id}",
+        ):
+            try:
+                response = _request(command)
+            except Exception:
+                continue
+            parsed = _parse_track_meter_payload(response)
+            if parsed:
+                meter_payload = response
+                out[track_id] = parsed
+                break
+
+        if verbose and track_id in out:
+            parsed = out[track_id]
+            lufs = parsed.get("lufs")
+            rms_db = parsed.get("rms_db")
+            print(
+                f"[WEBAPI METER] track={track_id} "
+                f"lufs={(f'{lufs:+.2f}' if lufs is not None else '--')} "
+                f"rms_db={(f'{rms_db:+.2f}' if rms_db is not None else '--')}"
+            )
+        elif verbose and meter_payload is not None:
+            print(f"[WEBAPI METER] track={track_id} meter payload not parsed: {meter_payload}")
     return out

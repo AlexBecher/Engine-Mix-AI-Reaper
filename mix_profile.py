@@ -7,7 +7,13 @@ import numpy as np
 from engine.fft_analyzer import analyze, DEFAULT_GAMMATONE_CENTERS_HZ
 from engine.decision_engine import decide
 from engine.loudness import get_lufs
-from control.web_api_client import configure_from_config, get_tracks_db, set_track_db
+from control.web_api_client import (
+    configure_from_config,
+    get_tracks_db,
+    get_tracks_lufs_rms,
+    set_track_db,
+    auto_configure_dry_run,
+)
 from config_manager import (
     load_config,
     get_track_db_limits,
@@ -15,6 +21,7 @@ from config_manager import (
     get_enabled_tracks,
     get_analysis_settings,
     get_master_track,
+    is_dry_run_enabled,
 )
 
 SAMPLE_RATE = 44100
@@ -25,6 +32,11 @@ MASTER_TRACK = get_master_track(_config)
 TRACK_DB_LIMITS = get_track_db_limits(_config)
 TRACK_CONFIG_FADER_DB = get_track_fader_db(_config)
 ENABLED_TRACKS = get_enabled_tracks(_config)
+FROZEN_TRACKS = {
+    int(track_id)
+    for track_id, track_data in (_config.get("tracks", {}) or {}).items()
+    if isinstance(track_data, dict) and bool(track_data.get("frozen", False))
+}
 
 settings = get_analysis_settings(_config)
 LUFS_WARNING_THRESHOLD = settings.get("lufs_warning_threshold", -14)
@@ -35,12 +47,72 @@ MAX_STEP_DOWN_DB = settings.get("max_step_down_db", 0.35)
 ERROR_DEADBAND = settings.get("error_deadband", 0.18)
 MAX_TRACKS_RAISE_PER_CYCLE = settings.get("max_tracks_raise_per_cycle", 1)
 SILENCE_FLOOR_RMS = settings.get("silence_floor_rms", 1e-6)
+CONTROL_BLEND_SPEC = settings.get("control_blend_spec", 0.78)
+CONTROL_BLEND_LUFS = settings.get("control_blend_lufs", 0.22)
+LEVEL_GAIN = settings.get("level_gain", 0.45)
+LEVEL_ERROR_CLIP_DB = settings.get("level_error_clip_db", 6.0)
+LEVEL_DEADBAND_DB = settings.get("level_deadband_db", 0.75)
+LEVEL_SOURCE = str(settings.get("level_source", "lufs")).strip().lower()
+LEVEL_ROLE_TARGETS_LUFS = settings.get("level_role_targets_lufs", {})
+LEVEL_ROLE_TARGETS_RMS = settings.get("level_role_targets_rms", {})
 try:
     SILENCE_FLOOR_RMS = float(SILENCE_FLOOR_RMS)
 except (TypeError, ValueError):
     SILENCE_FLOOR_RMS = 1e-6
 if not np.isfinite(SILENCE_FLOOR_RMS) or SILENCE_FLOOR_RMS < 0.0 or SILENCE_FLOOR_RMS > 1e-2:
     SILENCE_FLOOR_RMS = 1e-6
+
+
+def _safe_float(value, default):
+    try:
+        parsed = float(value)
+    except (TypeError, ValueError):
+        return float(default)
+    if not np.isfinite(parsed):
+        return float(default)
+    return float(parsed)
+
+
+def _normalize_blend_weights(alpha_spec, alpha_level):
+    spec = max(0.0, _safe_float(alpha_spec, 0.78))
+    level = max(0.0, _safe_float(alpha_level, 0.22))
+    total = spec + level
+    if total <= 1e-9:
+        return 1.0, 0.0
+    return spec / total, level / total
+
+
+def _sanitize_role_targets(raw_targets, fallback):
+    out = dict(fallback)
+    if not isinstance(raw_targets, dict):
+        return out
+    for role, target in raw_targets.items():
+        role_key = str(role).strip().lower()
+        if not role_key:
+            continue
+        out[role_key] = _safe_float(target, out.get(role_key, -22.0))
+    return out
+
+
+DEFAULT_LEVEL_ROLE_TARGETS = {
+    "vocals": -18.0,
+    "lead": -18.0,
+    "lead_vocal": -18.0,
+    "backing_vocals": -22.0,
+    "piano": -23.0,
+    "bass": -20.0,
+    "drums": -20.0,
+    "other": -23.0,
+}
+
+CONTROL_BLEND_SPEC, CONTROL_BLEND_LUFS = _normalize_blend_weights(CONTROL_BLEND_SPEC, CONTROL_BLEND_LUFS)
+LEVEL_GAIN = max(0.0, _safe_float(LEVEL_GAIN, 0.45))
+LEVEL_ERROR_CLIP_DB = max(0.1, _safe_float(LEVEL_ERROR_CLIP_DB, 6.0))
+LEVEL_DEADBAND_DB = max(0.0, _safe_float(LEVEL_DEADBAND_DB, 0.75))
+if LEVEL_SOURCE not in ("lufs", "rms", "rms_db"):
+    LEVEL_SOURCE = "lufs"
+LEVEL_ROLE_TARGETS_LUFS = _sanitize_role_targets(LEVEL_ROLE_TARGETS_LUFS, DEFAULT_LEVEL_ROLE_TARGETS)
+LEVEL_ROLE_TARGETS_RMS = _sanitize_role_targets(LEVEL_ROLE_TARGETS_RMS, DEFAULT_LEVEL_ROLE_TARGETS)
 
 # =============================================================================
 # Web API write/read workflow
@@ -90,10 +162,19 @@ ACTIVE_STEM_TRACK_MAP = dict(DEFAULT_STEM_TRACK_MAP)
 
 
 def _is_dry_run_enabled(debug=False):
+    """Check if DRY-RUN is enabled via environment variable or config."""
+    # Check environment variable first (takes precedence)
     raw_value = os.environ.get("MIX_ROBO_DRY_RUN")
-    if raw_value is None:
+    if raw_value is not None:
+        is_env_dry_run = str(raw_value).strip().lower() not in {"", "0", "false", "no", "off"}
+        if is_env_dry_run:
+            return True
+    
+    # Then check config
+    try:
+        return is_dry_run_enabled()
+    except Exception:
         return False
-    return str(raw_value).strip().lower() not in {"", "0", "false", "no", "off"}
 
 
 def _is_cut_first_enabled():
@@ -381,20 +462,29 @@ def _reload_config():
     """Reload configuration from config.json - useful for hot-reloading."""
     global _config, MASTER_TRACK, TRACK_DB_LIMITS, TRACK_CONFIG_FADER_DB
     global ENABLED_TRACKS, ACTIVE_STEM_TRACK_MAP, TRACK_ROLE_BY_ID, ACTIVE_LINEUP_SCENE
+    global FROZEN_TRACKS
     global LUFS_WARNING_THRESHOLD, ERROR_GAIN_UP, ERROR_GAIN_DOWN
     global MAX_STEP_UP_DB, MAX_STEP_DOWN_DB, ERROR_DEADBAND, MAX_TRACKS_RAISE_PER_CYCLE
-    global SILENCE_FLOOR_RMS
+    global SILENCE_FLOOR_RMS, CONTROL_BLEND_SPEC, CONTROL_BLEND_LUFS
+    global LEVEL_GAIN, LEVEL_ERROR_CLIP_DB, LEVEL_DEADBAND_DB, LEVEL_SOURCE
+    global LEVEL_ROLE_TARGETS_LUFS, LEVEL_ROLE_TARGETS_RMS
     
     _config = load_config()
     lineup_cfg = _config.get("lineup", {}) if isinstance(_config.get("lineup", {}), dict) else {}
     ACTIVE_LINEUP_SCENE = str(lineup_cfg.get("active_scene", "")).strip()
     configure_from_config(_config)
+    auto_configure_dry_run(_config)
     ACTIVE_STEM_TRACK_MAP = _build_track_map_from_config(_config)
     TRACK_ROLE_BY_ID = _build_track_roles_from_config(_config)
     MASTER_TRACK = get_master_track(_config)
     TRACK_DB_LIMITS = get_track_db_limits(_config)
     configured_faders = get_track_fader_db(_config)
     ENABLED_TRACKS = get_enabled_tracks(_config)
+    FROZEN_TRACKS = {
+        int(track_id)
+        for track_id, track_data in (_config.get("tracks", {}) or {}).items()
+        if isinstance(track_data, dict) and bool(track_data.get("frozen", False))
+    }
 
     valid_tracks = set(TRACK_DB_LIMITS.keys())
     for track in list(TRACK_CURRENT_DB.keys()):
@@ -424,12 +514,79 @@ def _reload_config():
     ERROR_DEADBAND = settings.get("error_deadband", 0.18)
     MAX_TRACKS_RAISE_PER_CYCLE = settings.get("max_tracks_raise_per_cycle", 1)
     SILENCE_FLOOR_RMS = settings.get("silence_floor_rms", 1e-6)
+    CONTROL_BLEND_SPEC = settings.get("control_blend_spec", 0.78)
+    CONTROL_BLEND_LUFS = settings.get("control_blend_lufs", 0.22)
+    LEVEL_GAIN = settings.get("level_gain", 0.45)
+    LEVEL_ERROR_CLIP_DB = settings.get("level_error_clip_db", 6.0)
+    LEVEL_DEADBAND_DB = settings.get("level_deadband_db", 0.75)
+    LEVEL_SOURCE = str(settings.get("level_source", "lufs")).strip().lower()
+    LEVEL_ROLE_TARGETS_LUFS = settings.get("level_role_targets_lufs", {})
+    LEVEL_ROLE_TARGETS_RMS = settings.get("level_role_targets_rms", {})
     try:
         SILENCE_FLOOR_RMS = float(SILENCE_FLOOR_RMS)
     except (TypeError, ValueError):
         SILENCE_FLOOR_RMS = 1e-6
     if not np.isfinite(SILENCE_FLOOR_RMS) or SILENCE_FLOOR_RMS < 0.0 or SILENCE_FLOOR_RMS > 1e-2:
         SILENCE_FLOOR_RMS = 1e-6
+
+    CONTROL_BLEND_SPEC, CONTROL_BLEND_LUFS = _normalize_blend_weights(CONTROL_BLEND_SPEC, CONTROL_BLEND_LUFS)
+    LEVEL_GAIN = max(0.0, _safe_float(LEVEL_GAIN, 0.45))
+    LEVEL_ERROR_CLIP_DB = max(0.1, _safe_float(LEVEL_ERROR_CLIP_DB, 6.0))
+    LEVEL_DEADBAND_DB = max(0.0, _safe_float(LEVEL_DEADBAND_DB, 0.75))
+    if LEVEL_SOURCE not in ("lufs", "rms", "rms_db"):
+        LEVEL_SOURCE = "lufs"
+    LEVEL_ROLE_TARGETS_LUFS = _sanitize_role_targets(LEVEL_ROLE_TARGETS_LUFS, DEFAULT_LEVEL_ROLE_TARGETS)
+    LEVEL_ROLE_TARGETS_RMS = _sanitize_role_targets(LEVEL_ROLE_TARGETS_RMS, DEFAULT_LEVEL_ROLE_TARGETS)
+
+
+def _track_level_target(role, level_source):
+    role_key = str(role or "other").strip().lower() or "other"
+    if level_source in ("rms", "rms_db"):
+        return LEVEL_ROLE_TARGETS_RMS.get(role_key, LEVEL_ROLE_TARGETS_RMS.get("other", -23.0))
+    return LEVEL_ROLE_TARGETS_LUFS.get(role_key, LEVEL_ROLE_TARGETS_LUFS.get("other", -23.0))
+
+
+def _compute_level_delta_db(track, role, track_meters):
+    if LEVEL_GAIN <= 0.0:
+        return 0.0
+
+    meter = track_meters.get(int(track), {})
+    if not meter:
+        return 0.0
+
+    level_source = LEVEL_SOURCE
+    if level_source in ("rms", "rms_db"):
+        measured = meter.get("rms_db")
+    else:
+        measured = meter.get("lufs")
+
+    if measured is None and "rms_db" in meter:
+        level_source = "rms_db"
+        measured = meter.get("rms_db")
+    elif measured is None and "lufs" in meter:
+        level_source = "lufs"
+        measured = meter.get("lufs")
+
+    if measured is None:
+        return 0.0
+
+    measured_value = _safe_float(measured, np.nan)
+    if not np.isfinite(measured_value):
+        return 0.0
+
+    target = _track_level_target(role, level_source)
+    level_error = float(target) - measured_value
+    if abs(level_error) <= LEVEL_DEADBAND_DB:
+        return 0.0
+
+    # Remove the neutral zone offset so only meaningful deviations drive control.
+    if level_error > 0.0:
+        level_error -= LEVEL_DEADBAND_DB
+    else:
+        level_error += LEVEL_DEADBAND_DB
+
+    level_error = float(np.clip(level_error, -LEVEL_ERROR_CLIP_DB, LEVEL_ERROR_CLIP_DB))
+    return float(LEVEL_GAIN * level_error)
 
 def _error_to_desired_db(error):
     """Convert band error into a relative dB delta for a track."""
@@ -538,17 +695,19 @@ INSTRUMENT_PRIORITY = {
 
 ROLE_BAND_INFLUENCE = {
     "vocals": {
-        "p640": 0.70,
+        "p640": 0.55,
         "p1200": 0.85,
         "p2500": 0.55,
         "p5000": 0.35,
         "p10000": 0.20,
+           
+
     },
     "backing_vocals": {
         "p640": 0.60,
         "p1200": 0.72,
         "p2500": 0.45,
-        "p5000": 0.25,
+        "p5000": 0.25, 
         "p10000": 0.15,
     },
     "drums": {
@@ -558,15 +717,30 @@ ROLE_BAND_INFLUENCE = {
         "p10000": 0.75,
         "p20000": 0.70,
     },
-    "piano": {
-        "p320": 0.92,
-        "p640": 0.88,
-        "p1200": 0.70,
+    "piano": {      
+        "p320":  0.90,  # ↓ sutil para não competir demais com violão
+        "p640":  0.15,  # ligeiro ajuste
+        "p1200": 0.90,  # ↑ antes: 0.70  (ataque/clareza do piano)
+        "p2500": 0.65,  # novo (presença de piano)
+        "p5000": 0.45,  # novo (brilho/palheta/sustain)
     },
 }
 
 VOCAL_PRESENCE_BANDS = ("p1200", "p2500", "p5000", "p10000")
 P640_SINGLE_NEG_DAMPING = 0.45
+VOCAL_ROLES = {"vocals", "backing_vocals"}
+TRACK_ACTIVITY_RMS_DB_THRESHOLD = -50.0
+TRACK_ACTIVITY_LUFS_THRESHOLD = -48.0
+PROXY_ROLE_ACTIVITY_DB_THRESHOLD = -10.0
+
+ROLE_ACTIVITY_PROXY_BANDS = {
+    "vocals": ("p640", "p1200", "p2500", "p5000", "p10000"),
+    "backing_vocals": ("p640", "p1200", "p2500", "p5000", "p10000"),
+    "drums": ("p80", "p160", "p5000"),
+    "bass": ("p20", "p40", "p80", "p160"),
+    "piano": ("p320", "p640", "p1200", "p2500"),
+    "other": ("p320", "p640", "p1200", "p2500"),
+}
 
 
 def _role_weight_for_band(role, band):
@@ -599,7 +773,57 @@ def _smooth_track_error(track, error):
     return float(smoothed)
 
 
-def _apply_actions(actions, track_map, debug=False, dry_run=False):
+def _is_track_meter_active(meter):
+    if not isinstance(meter, dict):
+        return False
+
+    rms_db = meter.get("rms_db")
+    if rms_db is not None:
+        rms_val = _safe_float(rms_db, np.nan)
+        if np.isfinite(rms_val) and rms_val >= TRACK_ACTIVITY_RMS_DB_THRESHOLD:
+            return True
+
+    lufs = meter.get("lufs")
+    if lufs is not None:
+        lufs_val = _safe_float(lufs, np.nan)
+        if np.isfinite(lufs_val) and lufs_val >= TRACK_ACTIVITY_LUFS_THRESHOLD:
+            return True
+
+    return False
+
+
+def _active_roles_from_track_meters(track_ids, track_meters):
+    active_roles = set()
+    for track_id in track_ids:
+        meter = track_meters.get(int(track_id), {})
+        if not _is_track_meter_active(meter):
+            continue
+        role = TRACK_ROLE_BY_ID.get(int(track_id), "other")
+        active_roles.add(str(role).strip().lower() or "other")
+    return active_roles
+
+
+def _active_roles_from_band_meter_proxy(band_meter_db):
+    active_roles = set()
+    if not isinstance(band_meter_db, dict):
+        return active_roles
+
+    for role, band_keys in ROLE_ACTIVITY_PROXY_BANDS.items():
+        values = [
+            _safe_float(band_meter_db.get(band_key), np.nan)
+            for band_key in band_keys
+            if band_key in band_meter_db
+        ]
+        values = [value for value in values if np.isfinite(value)]
+        if not values:
+            continue
+        mean_db = float(np.mean(values))
+        if mean_db >= PROXY_ROLE_ACTIVITY_DB_THRESHOLD:
+            active_roles.add(role)
+    return active_roles
+
+
+def _apply_actions(actions, track_map, debug=False, dry_run=False, band_meter_db=None):
     """Aggregate band errors per track and apply one coherent command per cycle."""
     presence_positive_count = sum(
         1
@@ -665,6 +889,28 @@ def _apply_actions(actions, track_map, debug=False, dry_run=False):
             "agg_neg": _weighted_mean(neg) if neg else 0.0,
         }
 
+    track_meters = {}
+    if pending and not dry_run:
+        try:
+            track_meters = get_tracks_lufs_rms(sorted(pending.keys()), verbose=debug)
+        except Exception as exc:
+            track_meters = {}
+            if debug:
+                print(f"[process] Track meter read failed: {exc}")
+
+    active_roles = set()
+    if pending and track_meters:
+        active_roles = _active_roles_from_track_meters(pending.keys(), track_meters)
+    if not active_roles:
+        active_roles = _active_roles_from_band_meter_proxy(band_meter_db)
+
+    vocal_only_content = bool(active_roles) and active_roles.issubset(VOCAL_ROLES)
+    if debug:
+        print(
+            f"[DIAG] Active roles={sorted(active_roles)} "
+            f"vocal_only_content={vocal_only_content}"
+        )
+
     # Se existir qualquer corte relevante, congelar boosts neste ciclo
     cut_first_enabled = _is_cut_first_enabled()
     has_strong_cut = any(abs(v["agg_neg"]) >= (ERROR_DEADBAND * 1.2) for v in pending.values())
@@ -672,31 +918,55 @@ def _apply_actions(actions, track_map, debug=False, dry_run=False):
 
     raised_tracks = 0
     for t in sorted(pending.keys()):
+        if t in FROZEN_TRACKS:
+            if debug:
+                print(f"[process] Track {t}: frozen (command skipped)")
+            continue
+
         pos = pending[t]["pos"]
         neg = pending[t]["neg"]
 
         if pos and neg:
             # Mantém sua resolução por direção dominante
             choose_negative = abs(_weighted_mean(neg)) >= abs(_weighted_mean(pos))
-            aggregate_error = _weighted_mean(neg) if choose_negative else _weighted_mean(pos)
+            aggregate_spec_error = _weighted_mean(neg) if choose_negative else _weighted_mean(pos)
         elif neg:
-            aggregate_error = _weighted_mean(neg)
+            aggregate_spec_error = _weighted_mean(neg)
         elif pos:
-            aggregate_error = _weighted_mean(pos) if allow_boosts else 0.0
+            aggregate_spec_error = _weighted_mean(pos) if allow_boosts else 0.0
         else:
-            aggregate_error = 0.0
+            aggregate_spec_error = 0.0
 
-        aggregate_error = _smooth_track_error(t, aggregate_error)
-        delta_db = _error_to_desired_db(aggregate_error)
+        aggregate_spec_error = _smooth_track_error(t, aggregate_spec_error)
+        spectral_delta_db = _error_to_desired_db(aggregate_spec_error)
+
+        role = TRACK_ROLE_BY_ID.get(t, "other")
+        level_delta_db = _compute_level_delta_db(t, role, track_meters)
+        delta_db = (CONTROL_BLEND_SPEC * spectral_delta_db) + (CONTROL_BLEND_LUFS * level_delta_db)
 
         if abs(delta_db) < 1e-6:
             if debug:
-                print(f"[process] Track {t}: aggregate error {aggregate_error:+.3f} inside deadband")
+                print(f"[process] Track {t}: fused delta inside deadband")
             continue
         if (delta_db > 0) and not allow_boosts:
             if debug:
                 print(f"[process] Track {t}: boost skipped due to stronger cuts in this cycle")
             continue
+        if (delta_db > 0) and vocal_only_content and (role in VOCAL_ROLES):
+            if debug:
+                print(f"[process] Track {t}: boost skipped (vocal-only content guard)")
+            continue
+
+        if debug:
+            meter = track_meters.get(t, {})
+            meter_lufs = meter.get("lufs")
+            meter_rms = meter.get("rms_db")
+            print(
+                f"[DIAG] Track {t} role={role} spec={spectral_delta_db:+.3f}dB "
+                f"level={level_delta_db:+.3f}dB fused={delta_db:+.3f}dB "
+                f"meter(lufs={(f'{meter_lufs:+.2f}' if meter_lufs is not None else '--')}, "
+                f"rms={(f'{meter_rms:+.2f}' if meter_rms is not None else '--')})"
+            )
 
         current_db = TRACK_CURRENT_DB.get(t, TRACK_CONFIG_FADER_DB.get(t, 0.0))
         if delta_db > 0 and raised_tracks >= MAX_TRACKS_RAISE_PER_CYCLE:
@@ -704,7 +974,7 @@ def _apply_actions(actions, track_map, debug=False, dry_run=False):
                 print(f"[process] Track {t} queued for next cycle (limit {MAX_TRACKS_RAISE_PER_CYCLE}/cycle)")
             continue
 
-        command_db = _command_track(t, delta_db, error_magnitude=aggregate_error, debug=debug)
+        command_db = _command_track(t, delta_db, error_magnitude=aggregate_spec_error, debug=debug)
         if command_db is not None:
             if command_db > current_db:
                 raised_tracks += 1
@@ -913,9 +1183,10 @@ def process(audio, sample_rate=SAMPLE_RATE, profile_name=None,
             print(f"[DIAG] Top band errors: {top}")
             print(f"[DIAG] Band values (0..1): {band_values}")
             print(f"[DIAG] Band meter dB: {band_meter_db}")
-        _apply_actions(actions, track_map, debug=debug, dry_run=dry_run)
+        _apply_actions(actions, track_map, debug=debug, dry_run=dry_run, band_meter_db=band_meter_db)
 
-        _refresh_track_levels(debug=debug)
+        if not dry_run:
+            _refresh_track_levels(debug=debug)
         return
 
     profiles = profiles or _load_profiles(profiles_path)
@@ -938,9 +1209,10 @@ def process(audio, sample_rate=SAMPLE_RATE, profile_name=None,
         print(f"[DIAG] Band meter dB: {band_meter_db}")
         print(f"[process] Actions to execute: {actions}")
 
-    _apply_actions(actions, track_map, debug=debug, dry_run=dry_run)
+    _apply_actions(actions, track_map, debug=debug, dry_run=dry_run, band_meter_db=band_meter_db)
 
-    _refresh_track_levels(debug=debug)
+    if not dry_run:
+        _refresh_track_levels(debug=debug)
 
 def process_stems(stems, profile_name=None, profiles_path="learning/profiles.json", stem_track_map=None, verbose=False):
     """Process multiple separated stems and send Web API updates for each."""
@@ -996,4 +1268,5 @@ def process_stems(stems, profile_name=None, profiles_path="learning/profiles.jso
                 else:
                     set_track_db(t, target_db, verbose=verbose)
 
-    _refresh_track_levels(debug=verbose)
+    if not dry_run:
+        _refresh_track_levels(debug=verbose)

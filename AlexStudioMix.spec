@@ -5,7 +5,7 @@ a = Analysis(
     ['config_gui.py'],
     pathex=[],
     binaries=[],
-    datas=[('C:\\Users\\agbec\\Documents\\Mix_Robo\\icon.png', '.'), ('C:\\Users\\agbec\\Documents\\Mix_Robo\\fader.png', '.'), ('C:\\Users\\agbec\\Documents\\Mix_Robo\\fader_buttom.png', '.')],
+    datas=[('C:\\Users\\XB7U\\VM\\Mix_Robo\\img\\icon.png', 'img'), ('C:\\Users\\XB7U\\VM\\Mix_Robo\\img\\fader.png', 'img'), ('C:\\Users\\XB7U\\VM\\Mix_Robo\\img\\fader_buttom.png', 'img'), ('C:\\Users\\XB7U\\VM\\Mix_Robo\\img\\back.png', 'img'), ('C:\\Users\\XB7U\\VM\\Mix_Robo\\img\\bass.png', 'img'), ('C:\\Users\\XB7U\\VM\\Mix_Robo\\img\\drum.png', 'img'), ('C:\\Users\\XB7U\\VM\\Mix_Robo\\img\\guitars.png', 'img'), ('C:\\Users\\XB7U\\VM\\Mix_Robo\\img\\keys.png', 'img'), ('C:\\Users\\XB7U\\VM\\Mix_Robo\\img\\lead.png', 'img'), ('C:\\Users\\XB7U\\VM\\Mix_Robo\\img\\checkin.png', 'img'), ('C:\\Users\\XB7U\\VM\\Mix_Robo\\img\\checkout.png', 'img'), ('C:\\Users\\XB7U\\VM\\Mix_Robo\\img\\del.png', 'img'), ('C:\\Users\\XB7U\\VM\\Mix_Robo\\img\\start.png', 'img'), ('C:\\Users\\XB7U\\VM\\Mix_Robo\\img\\stop.png', 'img'), ('C:\\Users\\XB7U\\VM\\Mix_Robo\\img\\save.png', 'img'), ('C:\\Users\\XB7U\\VM\\Mix_Robo\\img\\learn.png', 'img'), ('C:\\Users\\XB7U\\VM\\Mix_Robo\\img\\dry.png', 'img'), ('C:\\Users\\XB7U\\VM\\Mix_Robo\\img\\apply.png', 'img')],
     hiddenimports=['soundfile', 'sounddevice', 'pyloudnorm'],
     hookspath=[],
     hooksconfig={},
@@ -32,7 +32,7 @@ exe = EXE(
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
-    icon=['C:\\Users\\agbec\\Documents\\Mix_Robo\\build\\icon_256.ico'],
+    icon=['C:\\Users\\XB7U\\VM\\Mix_Robo\\build\\icon_256.ico'],
 )
 coll = COLLECT(
     exe,
