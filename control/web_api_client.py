@@ -196,6 +196,20 @@ def _parse_track_meter_payload(payload: str) -> Dict[str, float]:
 
     out: Dict[str, float] = {}
 
+    # Try to extract meter_peak from TRACK tab-separated columns (col 7: last_meter_peak in dB*10).
+    if text.startswith("TRACK"):
+        try:
+            cols = text.split("\t")
+            if len(cols) > 6:
+                meter_peak_raw = cols[6].strip()
+                if meter_peak_raw and meter_peak_raw != "-":
+                    meter_peak_db10 = float(meter_peak_raw)
+                    # Convert dB*10 to dB (e.g., -330 -> -33.0 dB)
+                    meter_peak_db = meter_peak_db10 / 10.0
+                    out["meter_peak_db"] = clamp_db(meter_peak_db)
+        except (ValueError, IndexError, TypeError):
+            pass
+
     lufs_match = _LUFS_PATTERN.search(text)
     if lufs_match:
         try:
@@ -276,10 +290,10 @@ def get_tracks_db(track_ids: Iterable[int], verbose: bool = False) -> Dict[int, 
 
 
 def get_tracks_lufs_rms(track_ids: Iterable[int], verbose: bool = False) -> Dict[int, Dict[str, float]]:
-    """Read per-track LUFS/RMS meters from REAPER Web API when available.
+    """Read per-track LUFS/RMS/meter_peak meters from REAPER Web API when available.
 
     The exact command support depends on the REAPER Web API setup. This helper
-    tries a few known patterns and falls back to parsing TRACK payload fields.
+    tries a few known patterns and falls back to parsing TRACK payload fields (col 7: last_meter_peak).
     """
     out: Dict[int, Dict[str, float]] = {}
     for tid in track_ids:
@@ -302,13 +316,17 @@ def get_tracks_lufs_rms(track_ids: Iterable[int], verbose: bool = False) -> Dict
 
         if verbose and track_id in out:
             parsed = out[track_id]
+            meter_peak_db = parsed.get("meter_peak_db")
             lufs = parsed.get("lufs")
             rms_db = parsed.get("rms_db")
-            print(
-                f"[WEBAPI METER] track={track_id} "
-                f"lufs={(f'{lufs:+.2f}' if lufs is not None else '--')} "
-                f"rms_db={(f'{rms_db:+.2f}' if rms_db is not None else '--')}"
-            )
+            log_parts = [f"track={track_id}"]
+            if meter_peak_db is not None:
+                log_parts.append(f"meter_peak={(f'{meter_peak_db:+.2f}' if meter_peak_db is not None else '--')}")
+            if lufs is not None:
+                log_parts.append(f"lufs={(f'{lufs:+.2f}' if lufs is not None else '--')}")
+            if rms_db is not None:
+                log_parts.append(f"rms_db={(f'{rms_db:+.2f}' if rms_db is not None else '--')}")
+            print(f"[WEBAPI METER] {' '.join(log_parts)}")
         elif verbose and meter_payload is not None:
             print(f"[WEBAPI METER] track={track_id} meter payload not parsed: {meter_payload}")
     return out

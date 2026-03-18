@@ -26,7 +26,6 @@ MASTER_METER_RE = re.compile(r"\[process\]\s+Master meters:\s+LUFS=([+-]?(?:\d+(
 TRACK_DIAG_RE = re.compile(
     r"\[DIAG\]\s+Track\s+(\d+)\s+role=([^\s]+)\s+spec=([+-]?\d+(?:\.\d+)?)dB\s+"
     r"level=([+-]?\d+(?:\.\d+)?)dB\s+fused=([+-]?\d+(?:\.\d+)?)dB\s+"
-    r"(?:mode=[^\s]+\s+)?"
     r"meter\(lufs=(--|[+-]?\d+(?:\.\d+)?),\s+rms=(--|[+-]?\d+(?:\.\d+)?)\)"
 )
 FFT_TONAL_SNAP_RE = re.compile(
@@ -50,7 +49,7 @@ METER_DB_FLOOR = -96.0
 METER_DB_CEIL = 12.0
 BAR_ATTACK = 0.35
 BAR_RELEASE = 0.12
-MIN_LAYOUT_WIDTH = 1290
+MIN_LAYOUT_WIDTH = 1280
 LINEUP_ICON_SIZE = 45
 LINEUP_ICON_COLUMNS = 2
 TOGGLE_ICON_SIZE = 16
@@ -111,7 +110,6 @@ class ConfigGUI:
         self.tracks_box = None
         self._track_row_counter = 0
         self.analysis_vars = {}
-        self.guardian_vars = {}
         self.run_vars = {}
         self.dry_run_var = tk.BooleanVar(value=False)
         self.audio_source_var = tk.StringVar(value="reastream")
@@ -171,8 +169,6 @@ class ConfigGUI:
         self.toggle_on_img = None
         self.toggle_off_img = None
         self.delete_profile_img = None
-        self._hover_hint_window = None
-        self._hover_hint_label = None
         self.action_button_images = {}
         self._lineup_role_syncing = False
 
@@ -764,7 +760,13 @@ class ConfigGUI:
         return container
 
     def _create_delete_profile_button(self, parent):
-        self._ensure_delete_icon()
+        if self.delete_profile_img is None:
+            icon_path = _asset_path("del.png")
+            if icon_path.exists():
+                try:
+                    self.delete_profile_img = self._fit_toggle_image(tk.PhotoImage(file=str(icon_path)))
+                except Exception:
+                    self.delete_profile_img = None
 
         btn = tk.Button(
             parent,
@@ -782,77 +784,6 @@ class ConfigGUI:
             btn.config(image=self.delete_profile_img)
         else:
             btn.config(text="X", fg="#ff6b6b", font=("Segoe UI", 9, "bold"), width=2)
-        return btn
-
-    def _ensure_delete_icon(self):
-        if self.delete_profile_img is None:
-            icon_path = _asset_path("del.png")
-            if icon_path.exists():
-                try:
-                    self.delete_profile_img = self._fit_toggle_image(tk.PhotoImage(file=str(icon_path)))
-                except Exception:
-                    self.delete_profile_img = None
-
-    def _show_hover_hint(self, text, x_root, y_root):
-        if not text:
-            return
-
-        if self._hover_hint_window is None or not self._hover_hint_window.winfo_exists():
-            self._hover_hint_window = tk.Toplevel(self.root)
-            self._hover_hint_window.overrideredirect(True)
-            try:
-                self._hover_hint_window.attributes("-topmost", True)
-            except Exception:
-                pass
-
-            self._hover_hint_label = tk.Label(
-                self._hover_hint_window,
-                text=text,
-                bg="#0b1220",
-                fg="#d7ecff",
-                bd=1,
-                relief="solid",
-                padx=6,
-                pady=2,
-                font=("Segoe UI", 8),
-            )
-            self._hover_hint_label.pack()
-        else:
-            self._hover_hint_label.config(text=text)
-
-        self._hover_hint_window.geometry(f"+{int(x_root)}+{int(y_root)}")
-
-    def _hide_hover_hint(self, _event=None):
-        if self._hover_hint_window is not None and self._hover_hint_window.winfo_exists():
-            self._hover_hint_window.destroy()
-        self._hover_hint_window = None
-        self._hover_hint_label = None
-
-    def _bind_hover_hint(self, widget, text):
-        widget.bind("<Enter>", lambda event: self._show_hover_hint(text, event.x_root + 12, event.y_root + 18), add="+")
-        widget.bind("<Motion>", lambda event: self._show_hover_hint(text, event.x_root + 12, event.y_root + 18), add="+")
-        widget.bind("<Leave>", self._hide_hover_hint, add="+")
-
-    def _create_delete_track_button(self, parent, row_key):
-        self._ensure_delete_icon()
-
-        btn = tk.Button(
-            parent,
-            command=lambda rk=row_key: self._remove_track_row(rk),
-            relief="flat",
-            bd=0,
-            highlightthickness=0,
-            bg="#0d1117",
-            activebackground="#0d1117",
-            cursor="hand2",
-            padx=1,
-            pady=0,
-        )
-        if self.delete_profile_img is not None:
-            btn.config(image=self.delete_profile_img)
-        else:
-            btn.config(text="X", fg="#ff6b6b", font=("Segoe UI", 9, "bold"), width=2)
-        self._bind_hover_hint(btn, "Remover Track")
         return btn
 
     def _fit_action_image(self, image):
@@ -886,20 +817,10 @@ class ConfigGUI:
         if self.start_stop_btn is None:
             return
         if running and "stop" in self.action_button_images:
-            self.start_stop_btn.config(
-                image=self.action_button_images["stop"],
-                #text="STOP",
-                compound="top",
-                fg="#22c55e",
-            )
+            self.start_stop_btn.config(image=self.action_button_images["stop"], text="")
             return
         if (not running) and "start" in self.action_button_images:
-            self.start_stop_btn.config(
-                image=self.action_button_images["start"],
-                #text="RUN PROFILE",
-                compound="top",
-                fg="#22c55e",
-            )
+            self.start_stop_btn.config(image=self.action_button_images["start"], text="")
             return
         self.start_stop_btn.config(text="STOP" if running else "START")
 
@@ -1034,7 +955,7 @@ class ConfigGUI:
         tracks_box = ttk.LabelFrame(parent, text="Tracks (mute + IDs + limits)", padding=10)
         tracks_box.grid(row=1, column=0, sticky="ew", pady=(0, 8))
         self.tracks_box = tracks_box
-        headers = ["Active", "Track ID", "Name", "Min dB", "Max dB", "Band", "Remove"]
+        headers = ["Active", "Track ID", "Name", "Min dB", "Max dB", "Band"]
         for idx, text in enumerate(headers):
             ttk.Label(tracks_box, text=text).grid(row=0, column=idx, padx=4, pady=(0, 4), sticky="w")
 
@@ -1051,19 +972,14 @@ class ConfigGUI:
             )
 
         self.track_controls = ttk.Frame(tracks_box)
-        self.track_controls.grid(row=len(self.track_rows) + 1, column=0, columnspan=7, sticky="w", pady=(8, 0))
+        self.track_controls.grid(row=len(self.track_rows) + 1, column=0, columnspan=6, sticky="w", pady=(8, 0))
         self.add_track_btn = ttk.Button(self.track_controls, text="+ Add Track", command=self._on_add_track)
         self.add_track_btn.grid(row=0, column=0, sticky="w")
         ttk.Button(self.track_controls, text="Detail", command=self._show_track_map_details).grid(row=0, column=1, sticky="w", padx=(8, 0))
         self._update_add_track_button_state()
 
-        settings_row = ttk.Frame(parent)
-        settings_row.grid(row=2, column=0, sticky="ew", pady=(0, 8))
-        settings_row.columnconfigure(0, weight=1, uniform="settings_col")
-        settings_row.columnconfigure(1, weight=1, uniform="settings_col")
-
-        analysis_box = ttk.LabelFrame(settings_row, text="Analysis settings", padding=10)
-        analysis_box.grid(row=0, column=0, sticky="nsew", padx=(0, 4))
+        analysis_box = ttk.LabelFrame(parent, text="Analysis settings", padding=10)
+        analysis_box.grid(row=2, column=0, sticky="ew", pady=(0, 8))
         analysis_defaults = {
             "error_gain_up": 1.2,
             "error_gain_down": 2.2,
@@ -1112,32 +1028,6 @@ class ConfigGUI:
             state="readonly",
             width=10,
         ).grid(row=level_source_row, column=1, sticky="w", padx=8)
-
-        guardian_box = ttk.LabelFrame(settings_row, text="Guardian", padding=10)
-        guardian_box.grid(row=0, column=1, sticky="nsew", padx=(4, 0))
-        guardian_defaults = {
-            "gain_lufs": 0.6,
-            "max_lufs_correction_db": 1.2,
-            "deadband_lufs": 0.7,
-            "meter_peak_min_activity_db": -1300.0,
-            "guardian_gate_threshold_db": 3.0,
-        }
-        guardian_labels = [
-            ("Gain LUFS", "gain_lufs", tk.DoubleVar),
-            ("Max correction (dB)", "max_lufs_correction_db", tk.DoubleVar),
-            ("Deadband (dB)", "deadband_lufs", tk.DoubleVar),
-            ("Min activity dB", "meter_peak_min_activity_db", tk.DoubleVar),
-            ("Gate threshold (dB)", "guardian_gate_threshold_db", tk.DoubleVar),
-        ]
-        _gf = self.config.get("analysis_settings", {}).get("meter_fusion", {})
-        if not isinstance(_gf, dict):
-            _gf = {}
-        for row_idx, (label, key, var_type) in enumerate(guardian_labels):
-            current = _gf.get(key, guardian_defaults[key])
-            var = var_type(value=current)
-            self.guardian_vars[key] = var
-            ttk.Label(guardian_box, text=label).grid(row=row_idx, column=0, sticky="w", pady=2)
-            ttk.Entry(guardian_box, textvariable=var, width=12).grid(row=row_idx, column=1, sticky="w", padx=8)
 
         run_box = ttk.LabelFrame(parent, text="Run settings", padding=10)
         run_box.grid(row=3, column=0, sticky="ew")
@@ -1204,12 +1094,6 @@ class ConfigGUI:
         verbose_toggle.grid(row=5, column=2, columnspan=2, sticky="w", pady=(8, 0))
         ttk.Label(run_box, text="Cal SR ref Hz (0=off)").grid(row=6, column=0, sticky="w", pady=(6, 0))
         ttk.Entry(run_box, textvariable=self.run_vars["calibrate_freq"], width=14).grid(row=6, column=1, sticky="w", padx=8, pady=(6, 0))
-        ttk.Button(run_box, text="Como usar?", command=self._show_sr_cal_help).grid(
-            row=6,
-            column=2,
-            sticky="w",
-            pady=(6, 0),
-        )
 
     def _load_profile_names(self):
         profiles_path = _app_dir() / "learning" / "profiles.json"
@@ -1243,25 +1127,6 @@ class ConfigGUI:
         if not current and values:
             self.run_vars["profile"].set(values[0])
         self._update_runtime_profile_label()
-
-    def _show_sr_cal_help(self):
-        lines = [
-            "Passo a passo SR Cal:",
-            "",
-            "1) No Reaper, toque tom de teste em 640 Hz.",
-            "2) No campo 'Cal SR ref Hz', coloque 320.",
-            "3) Clique RUN PROFILE e aguarde o status SR Cal estabilizar.",
-            "4) Confirmacao esperada: factor=0.5000 e snap=0.5x.",
-            "5) Pare o tom de teste e volte para o audio real.",
-            "6) Rode 20-40s e confirme estabilidade da leitura.",
-            "7) Se ficou estavel, clique SAVE.",
-            "",
-            "Regras rapidas:",
-            "- 0 no campo desativa calibracao.",
-            "- Se 640 Hz no Reaper e 640 no campo, tende a factor~1.0.",
-            "- Se SR Cal oscilar, repita com volume mais limpo do tom.",
-        ]
-        messagebox.showinfo("Como usar SR Cal", "\n".join(lines))
 
     def _delete_selected_profile(self):
         selected = str(self.run_vars.get("profile", tk.StringVar(value="")).get()).strip()
@@ -1366,18 +1231,11 @@ class ConfigGUI:
 
         enabled_toggle = self._create_image_toggle(self.tracks_box, enabled_var)
         enabled_toggle.grid(row=row, column=0, padx=4, sticky="w")
-        id_entry = ttk.Entry(self.tracks_box, textvariable=id_var, width=8)
-        id_entry.grid(row=row, column=1, padx=4, sticky="w")
-        name_entry = ttk.Entry(self.tracks_box, textvariable=name_var, width=14)
-        name_entry.grid(row=row, column=2, padx=4, sticky="w")
-        min_entry = ttk.Entry(self.tracks_box, textvariable=min_var, width=8)
-        min_entry.grid(row=row, column=3, padx=4, sticky="w")
-        max_entry = ttk.Entry(self.tracks_box, textvariable=max_var, width=8)
-        max_entry.grid(row=row, column=4, padx=4, sticky="w")
-        band_label = ttk.Label(self.tracks_box, textvariable=band_label_var, width=30)
-        band_label.grid(row=row, column=5, padx=4, sticky="w")
-        delete_btn = self._create_delete_track_button(self.tracks_box, row_key)
-        delete_btn.grid(row=row, column=6, padx=4, sticky="w")
+        ttk.Entry(self.tracks_box, textvariable=id_var, width=8).grid(row=row, column=1, padx=4, sticky="w")
+        ttk.Entry(self.tracks_box, textvariable=name_var, width=14).grid(row=row, column=2, padx=4, sticky="w")
+        ttk.Entry(self.tracks_box, textvariable=min_var, width=8).grid(row=row, column=3, padx=4, sticky="w")
+        ttk.Entry(self.tracks_box, textvariable=max_var, width=8).grid(row=row, column=4, padx=4, sticky="w")
+        ttk.Label(self.tracks_box, textvariable=band_label_var, width=30).grid(row=row, column=5, padx=4, sticky="w")
 
         row_data = {
             "enabled": enabled_var,
@@ -1388,7 +1246,6 @@ class ConfigGUI:
             "fader_db": fader_var,
             "frozen": frozen_var,
             "band_label": band_label_var,
-            "widgets": [enabled_toggle, id_entry, name_entry, min_entry, max_entry, band_label, delete_btn],
         }
 
         for var_key in ("track_id", "name", "min_db", "max_db"):
@@ -1426,48 +1283,6 @@ class ConfigGUI:
             fader_db=0.0,
             frozen=False,
         )
-
-    def _remove_track_row(self, row_key):
-        row_data = self.track_vars.get(row_key)
-        if row_data is None:
-            return
-
-        try:
-            track_id = int(row_data["track_id"].get())
-        except Exception:
-            track_id = 0
-        track_name = str(row_data["name"].get()).strip() or f"Track {track_id}"
-
-        confirm = messagebox.askyesno("Remover Track", f"Remover '{track_name}' (ID {track_id})?")
-        if not confirm:
-            return
-
-        for widget in row_data.get("widgets", []):
-            try:
-                widget.destroy()
-            except Exception:
-                pass
-
-        self.track_vars.pop(row_key, None)
-        try:
-            self.track_rows.remove(row_data)
-        except ValueError:
-            pass
-
-        self._reindex_track_rows()
-        self._update_add_track_button_state()
-        self._rebuild_mixer_view()
-
-    def _reindex_track_rows(self):
-        for row_index, row_data in enumerate(self.track_rows, start=1):
-            for widget in row_data.get("widgets", []):
-                try:
-                    widget.grid_configure(row=row_index)
-                except Exception:
-                    pass
-
-        if self.track_controls is not None:
-            self.track_controls.grid_configure(row=len(self.track_rows) + 1)
 
     def _on_track_row_changed(self, row_key):
         row_data = self.track_vars.get(row_key)
@@ -1526,11 +1341,9 @@ class ConfigGUI:
         self._lineup_role_syncing = False
 
         self._load_action_button_images()
-        action_row = ttk.Frame(control_box)
-        action_row.grid(row=0, column=0, columnspan=6, sticky="w")
 
         self.start_stop_btn = tk.Button(
-            action_row,
+            control_box,
             command=self._toggle_start_stop,
             bg="#1f2937",
             fg="#9ca3af",
@@ -1541,13 +1354,12 @@ class ConfigGUI:
             padx=0,
             pady=0,
             height=60,
-           
         )
         self._set_start_stop_button_visual(False)
-        self.start_stop_btn.grid(row=0, column=0, padx=(0, 0), sticky="w")
+        self.start_stop_btn.grid(row=0, column=0, padx=(0, 6), sticky="w")
 
         save_btn = tk.Button(
-            action_row,
+            control_box,
             command=self._save_config,
             bg="#1f2937",
             fg="#9ca3af",
@@ -1563,10 +1375,10 @@ class ConfigGUI:
             save_btn.config(image=self.action_button_images["save"], text="")
         else:
             save_btn.config(text="SAVE CONFIG")
-        save_btn.grid(row=0, column=1, padx=(0, 0), sticky="w")
+        save_btn.grid(row=0, column=1, padx=(0, 6), sticky="w")
 
         learn_btn = tk.Button(
-            action_row,
+            control_box,
             command=self._learn_and_save_suggested,
             bg="#1f2937",
             fg="#9ca3af",
@@ -1582,7 +1394,7 @@ class ConfigGUI:
             learn_btn.config(image=self.action_button_images["learn"], text="")
         else:
             learn_btn.config(text="LEARN (10 s) + SAVE como")
-        learn_btn.grid(row=0, column=2, padx=(0, 0), sticky="w")
+        learn_btn.grid(row=0, column=2, padx=(0, 6), sticky="w")
 
         self.runtime_label = ttk.Label(control_box, text="Stopped", foreground="#ff6b6b")
         self.runtime_label.grid(row=1, column=0, columnspan=2, sticky="w", pady=(8, 0))
@@ -1616,7 +1428,6 @@ class ConfigGUI:
 
         self.reastream_pairs_label = ttk.Label(control_box, text="ReaStream pairs: --", foreground="#6b7280")
         self.reastream_pairs_label.grid(row=11, column=0, columnspan=2, sticky="w", pady=(2, 0))
-
         self.sr_cal_label = ttk.Label(control_box, text="SR Cal: --", foreground="#6b7280")
         self.sr_cal_label.grid(row=12, column=0, columnspan=2, sticky="w", pady=(2, 0))
         self._update_runtime_profile_label()
@@ -1624,7 +1435,7 @@ class ConfigGUI:
 
         self.learn_preview_actions_frame = None
         self.learn_apply_btn = tk.Button(
-            action_row,
+            control_box,
             command=self._apply_learned_profile,
             state="disabled",
             bg="#1f2937",
@@ -1641,9 +1452,9 @@ class ConfigGUI:
             self.learn_apply_btn.config(image=self.action_button_images["apply"], text="")
         else:
             self.learn_apply_btn.config(text="APLICAR COMO PERFIL")
-        self.learn_apply_btn.grid(row=0, column=4, padx=(0, 0), sticky="w")
+        self.learn_apply_btn.grid(row=0, column=4, padx=(0, 6), sticky="w")
         self.learn_merge_btn = tk.Button(
-            action_row,
+            control_box,
             command=self._merge_learned_profile_70_30,
             state="disabled",
             bg="#1f2937",
@@ -1663,7 +1474,7 @@ class ConfigGUI:
         self.learn_merge_btn.grid(row=0, column=5, sticky="w", padx=(0, 0))
 
         self.dry_run_btn = tk.Button(
-            action_row,
+            control_box,
             command=self._toggle_dry_run,
             bg="#1f2937",
             fg="#9ca3af",
@@ -1679,7 +1490,7 @@ class ConfigGUI:
             self.dry_run_btn.config(image=self.action_button_images["dry"], text="")
         else:
             self.dry_run_btn.config(text="DRY-RUN: OFF")
-        self.dry_run_btn.grid(row=0, column=3, padx=(0, 0), sticky="w")
+        self.dry_run_btn.grid(row=0, column=3, padx=(0, 6), sticky="w")
 
         self.dry_run_frame = ttk.LabelFrame(control_box, text="DRY-RUN Source", padding=8)
         self.dry_run_frame.grid(row=8, column=0, columnspan=3, sticky="ew", pady=(8, 0))
@@ -2344,17 +2155,6 @@ class ConfigGUI:
             "level_gain": float(self.analysis_vars["level_gain"].get()),
             "level_error_clip_db": float(self.analysis_vars["level_error_clip_db"].get()),
             "level_source": str(self.analysis_vars["level_source"].get()).strip().lower() or "lufs",
-            "meter_fusion": {
-                "alpha_spectral": float(analysis_settings.get("meter_fusion", {}).get("alpha_spectral", 0.5)),
-                "alpha_lufs": float(analysis_settings.get("meter_fusion", {}).get("alpha_lufs", 0.5)),
-                "gain_lufs": float(self.guardian_vars["gain_lufs"].get()),
-                "max_lufs_correction_db": float(self.guardian_vars["max_lufs_correction_db"].get()),
-                "deadband_lufs": float(self.guardian_vars["deadband_lufs"].get()),
-                "min_activity_db": float(analysis_settings.get("meter_fusion", {}).get("min_activity_db", -50.0)),
-                "meter_peak_min_activity_db": float(self.guardian_vars["meter_peak_min_activity_db"].get()),
-                "guardian_gate_threshold_db": float(self.guardian_vars["guardian_gate_threshold_db"].get()),
-                "min_valid_seconds": float(analysis_settings.get("meter_fusion", {}).get("min_valid_seconds", 2.0)),
-            },
         })
         cfg["analysis_settings"] = analysis_settings
 
@@ -2373,8 +2173,8 @@ class ConfigGUI:
             "webapi_timeout": float(self.run_vars["webapi_timeout"].get()),
             "channels": int(self.run_vars["channels"].get()),
             "analysis_interval": float(self.run_vars["analysis_interval"].get()),
-            "calibrate_freq": float(self.run_vars["calibrate_freq"].get()),
             "verbose": bool(self.run_vars["verbose"].get()),
+            "calibrate_freq": float(self.run_vars["calibrate_freq"].get()),
         }
 
         cfg["lineup"] = self._build_lineup_config_from_roles(cfg)
@@ -2388,7 +2188,7 @@ class ConfigGUI:
             "loop_count": int(current_dry.get("loop_count", 1) or 1),
             "device_id": current_dry.get("device_id", None),
             "device_name": selected_device,
-            "sample_rate": int(current_dry.get("sample_rate", 44100) or 44100),
+            "sample_rate": int(current_dry.get("sample_rate", 48000) or 48000),
             "blocksize": int(current_dry.get("blocksize", 4096) or 4096),
             "channels": int(current_dry.get("channels", 2) or 2),
         }
@@ -2922,19 +2722,6 @@ class ConfigGUI:
                     self.sr_cal_label.config(
                         text=f"SR Cal: {payload}",
                         foreground="#34d399",
-                    )
-                elif payload.startswith("factor="):
-                    # Keep active corrected state green when snap factor is known.
-                    # Purple is reserved for uncertain/raw status.
-                    if "snap=raw" in payload:
-                        color = "#a78bfa"
-                    elif "factor=1.0000" in payload:
-                        color = "#9ca3af"
-                    else:
-                        color = "#34d399"
-                    self.sr_cal_label.config(
-                        text=f"SR Cal: {payload}",
-                        foreground=color,
                     )
                 else:
                     self.sr_cal_label.config(

@@ -2,7 +2,7 @@ import argparse
 import math
 import re
 import time
-from typing import List, Optional, Tuple
+from typing import Dict, List, Optional, Tuple
 
 import requests
 
@@ -11,6 +11,34 @@ REAPER_VOL_MIN = 0.0
 REAPER_VOL_MAX = 3.981072
 REAPER_DB_MIN = -133.0
 REAPER_DB_MAX = 12.0
+
+_FLOAT_PATTERN = r"([+-]?(?:\d+(?:\.\d+)?|\.\d+))"
+_LUFS_PATTERN = re.compile(rf"\blufs\b\s*[:=]\s*{_FLOAT_PATTERN}", re.IGNORECASE)
+_RMS_DB_PATTERN = re.compile(rf"\brms\b\s*[:=]\s*{_FLOAT_PATTERN}\s*dB?", re.IGNORECASE)
+_RMS_GENERIC_PATTERN = re.compile(rf"\brms\b\s*[:=]\s*{_FLOAT_PATTERN}", re.IGNORECASE)
+
+METER_COMMAND_TEMPLATES = [
+    "TRACK/{track}/METER",
+    "GET/TRACK/{track}/METER",
+    "TRACK/{track}",
+    "GET/TRACK/{track}",
+    "TRACK/{track}/VU",
+    "GET/TRACK/{track}/VU",
+    "TRACK/{track}/PEAK",
+    "GET/TRACK/{track}/PEAK",
+    "TRACK/{track}/RMS",
+    "GET/TRACK/{track}/RMS",
+    "TRACK/{track}/LOUDNESS",
+    "GET/TRACK/{track}/LOUDNESS",
+    "TRACK/{track}/LUFS",
+    "GET/TRACK/{track}/LUFS",
+    "TRACK/{track}/STATS",
+    "GET/TRACK/{track}/STATS",
+    "TRACK/{track}/STATUS",
+    "GET/TRACK/{track}/STATUS",
+    "TRACK/{track}/INFO",
+    "GET/TRACK/{track}/INFO",
+]
 
 
 def clamp_volume(value: float) -> float:
@@ -36,6 +64,42 @@ def db_to_volume(db: float) -> float:
     return clamp_volume(vol)
 
 
+def parse_track_meter_payload(payload: str) -> Dict[str, float]:
+    text = str(payload or "").strip()
+    if not text:
+        return {}
+
+    out: Dict[str, float] = {}
+
+    lufs_match = _LUFS_PATTERN.search(text)
+    if lufs_match:
+        try:
+            out["lufs"] = float(lufs_match.group(1))
+        except (TypeError, ValueError):
+            pass
+
+    rms_db_match = _RMS_DB_PATTERN.search(text)
+    if rms_db_match:
+        try:
+            out["rms_db"] = float(rms_db_match.group(1))
+        except (TypeError, ValueError):
+            pass
+
+    if "rms_db" not in out:
+        rms_match = _RMS_GENERIC_PATTERN.search(text)
+        if rms_match:
+            try:
+                rms_value = float(rms_match.group(1))
+                if -120.0 <= rms_value <= 24.0:
+                    out["rms_db"] = rms_value
+                elif rms_value > 0.0:
+                    out["rms_db"] = clamp_db(20.0 * math.log10(rms_value))
+            except (TypeError, ValueError):
+                pass
+
+    return out
+
+
 class ReaperWebAPI:
     def __init__(self, host: str = "192.168.15.48", port: int = 8080, base: str = "/_", timeout: float = 2.5):
         base = "/" + base.strip("/")
@@ -48,6 +112,12 @@ class ReaperWebAPI:
         response = self.session.get(url, timeout=self.timeout)
         response.raise_for_status()
         return response.text.strip()
+
+    def try_get(self, command: str) -> Tuple[bool, str]:
+        try:
+            return True, self._get(command)
+        except Exception as exc:
+            return False, f"ERROR: {exc}"
 
     def _first_int(self, text: str) -> int:
         match = re.search(r"-?\d+", text)
@@ -165,6 +235,38 @@ def probe_track(api: ReaperWebAPI, track_id: int) -> None:
         print(f"Guessed volume: ERROR: {exc}")
 
 
+def scan_track_meter_commands(api: ReaperWebAPI, track_id: int, commands: Optional[List[str]] = None) -> None:
+    templates = commands if commands else METER_COMMAND_TEMPLATES
+    print(f"\n=== Meter scan for track {track_id} ===")
+    for template in templates:
+        command = template.format(track=track_id)
+        ok, payload = api.try_get(command)
+        parsed = parse_track_meter_payload(payload) if ok else {}
+        status = "OK" if ok else "ERR"
+        parsed_text = "-"
+        if parsed:
+            parts = []
+            if "lufs" in parsed:
+                parts.append(f"LUFS={parsed['lufs']:+.2f}")
+            if "rms_db" in parsed:
+                parts.append(f"RMS={parsed['rms_db']:+.2f}dB")
+            parsed_text = ", ".join(parts)
+
+        print(f"[{status}] {command}")
+        if parsed:
+            print(f"  Parsed: {parsed_text}")
+        preview = payload.replace("\r", " ").replace("\n", " ")
+        if len(preview) > 220:
+            preview = preview[:217] + "..."
+        print(f"  Payload: {preview}")
+
+
+def maybe_scan_track(api: ReaperWebAPI, track_id: Optional[int], commands: Optional[List[str]] = None) -> None:
+    if track_id is None:
+        return
+    scan_track_meter_commands(api, track_id, commands=commands)
+
+
 def maybe_set_volume(api: ReaperWebAPI, set_data: Optional[Tuple[int, float]]) -> None:
     if not set_data:
         return
@@ -219,6 +321,31 @@ def build_parser() -> argparse.ArgumentParser:
         type=int,
         help="Mostra resposta crua da track e parsing (bom para calibrar volume)",
     )
+    parser.add_argument(
+        "--scan-meter",
+        type=int,
+        metavar="TRACK_ID",
+        help="Varre comandos candidatos de meter/LUFS para uma track e mostra payload + parsing",
+    )
+    parser.add_argument(
+        "--meter-command",
+        action="append",
+        dest="meter_commands",
+        help=(
+            "Template extra de comando para scan de meter. Use {track} como placeholder, "
+            "ex: --meter-command TRACK/{track}/LOUDNESS"
+        ),
+    )
+    parser.add_argument(
+        "--only-meter-commands",
+        action="store_true",
+        help="Usa somente os --meter-command informados (sem comandos padrao).",
+    )
+    parser.add_argument(
+        "--only-scan",
+        action="store_true",
+        help="Executa apenas a varredura de meter, sem overview das tracks",
+    )
     return parser
 
 
@@ -236,6 +363,17 @@ def main() -> None:
 
     if args.probe is not None:
         probe_track(api, args.probe)
+
+    scan_commands = list(METER_COMMAND_TEMPLATES)
+    if args.only_meter_commands:
+        scan_commands = list(args.meter_commands or [])
+    elif args.meter_commands:
+        scan_commands.extend(args.meter_commands)
+
+    maybe_scan_track(api, args.scan_meter, commands=scan_commands)
+
+    if args.only_scan:
+        return
 
     track_ids = args.tracks if args.tracks else default_tracks(api)
     print_track_overview(api, track_ids)

@@ -1,53 +1,45 @@
 {
   "master_track": 1,
   "tracks": {
-    "3": {
-      "name": "vocals",
+    "2": {
+      "name": "guitar",
       "enabled": true,
       "frozen": false,
-      "min_db": -60.0,
-      "max_db": -0.0,
-      "fader_db": -8.85
+      "min_db": -32.0,
+      "max_db": 0.0,
+      "fader_db": -7.24
     },
-    "6": {
+    "3": {
       "name": "drums",
       "enabled": true,
-      "frozen": false,
+      "frozen": true,
       "min_db": -28.0,
-      "max_db": -11.0,
-      "fader_db": -11.0
+      "max_db": 3.0,
+      "fader_db": -4.82
     },
-    "7": {
+    "11": {
+      "name": "lead",
+      "enabled": true,
+      "frozen": false,
+      "min_db": -30.0,
+      "max_db": 0.0,
+      "fader_db": -15.05
+    },
+    "12": {
+      "name": "keys",
+      "enabled": true,
+      "frozen": false,
+      "min_db": -30.0,
+      "max_db": 0.0,
+      "fader_db": -14.94
+    },
+    "13": {
       "name": "baixo",
       "enabled": true,
       "frozen": false,
       "min_db": -30.0,
-      "max_db": -0.0,
-      "fader_db": -7.71
-    },
-    "8": {
-      "name": "keys",
-      "enabled": true,
-      "frozen": false,
-      "min_db": -32.0,
-      "max_db": -16.6,
-      "fader_db": -26.05
-    },
-    "11": {
-      "name": "violao",
-      "enabled": true,
-      "frozen": false,
-      "min_db": -30.0,
-      "max_db": -17.0,
-      "fader_db": -17.72
-    },
-    "158": {
-      "name": "keys",
-      "enabled": true,
-      "frozen": false,
-      "min_db": -32.0,
-      "max_db": -16.6,
-      "fader_db": -26.8
+      "max_db": 0.0,
+      "fader_db": -30.0
     }
   },
   "analysis_settings": {
@@ -77,10 +69,12 @@
     "meter_fusion": {
       "alpha_spectral": 0.5,
       "alpha_lufs": 0.5,
-      "gain_lufs": 0.6,
-      "max_lufs_correction_db": 1.2,
-      "deadband_lufs": 0.7,
+      "gain_lufs": 0.3,
+      "max_lufs_correction_db": 1.0,
+      "deadband_lufs": 1.0,
       "min_activity_db": -50.0,
+      "meter_peak_min_activity_db": -1300.0,
+      "guardian_gate_threshold_db": 10.0,
       "min_valid_seconds": 2.0
     },
     "spectral_noise_floor_db": -40.0,
@@ -89,7 +83,7 @@
     "enable_single_source_spectral_guard": true
   },
   "run_settings": {
-    "profile": "Worship-PA-Calibrated",
+    "profile": "Profile_learn_004",
     "reastream": true,
     "reastream_identifier": "master",
     "reastream_host": "127.0.0.1",

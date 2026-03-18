@@ -1,0 +1,13 @@
+[DRY-RUN LOG] started=2026-03-17T22:10:07.989749
+[DRY-RUN LOG] cwd=C:\Users\XB7U\VM\Mix_Robo
+[DRY-RUN LOG] command=c:\Users\XB7U\VM\Mix_Robo\venv\Scripts\python.exe -u run_profile.py --profile Worship-PA-Calibrated --channels 2 --analysis-interval 0.8 --webapi-host 127.0.0.1 --webapi-port 8080 --webapi-base /_ --webapi-timeout 2.5 --reastream-identifier master --reastream-host 127.0.0.1 --reastream-port 58710 --test-audio C:/Users/XB7U/VM/Mix_Robo/320.mp3 --test-speed 1.0 --verbose
+
+Starting simulated live input from WAV: C:/Users/XB7U/VM/Mix_Robo/320.mp3
+[TEST MODE] CUT-FIRST disabled for calibration
+[TEST MODE] VOCAL-FOCUS enabled for calibration
+Using track map: None
+[ANALYSIS] Janela de 0.8s (min 22050 samples) para cada ajuste.
+[C:\vcpkg\buildtrees\mpg123\src\-66150af195.clean\src\libmpg123\id3.c:process_comment():587] error: No comment text / valid description?
+Simulating live audio from C:/Users/XB7U/VM/Mix_Robo/320.mp3 (9.73s, 2 ch)... press Ctrl+C to stop.
+
+[DRY-RUN LOG] ended=2026-03-17T22:10:10.429842

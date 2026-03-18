@@ -1,0 +1,33 @@
+[DRY-RUN LOG] started=2026-03-18T10:01:56.572011
+[DRY-RUN LOG] cwd=C:\Users\XB7U\VM\Mix_Robo
+[DRY-RUN LOG] command=c:\Users\XB7U\VM\Mix_Robo\venv\Scripts\python.exe -u run_profile.py --profile Worship-PA-Calibrated --channels 2 --analysis-interval 0.8 --webapi-host 127.0.0.1 --webapi-port 8080 --webapi-base /_ --webapi-timeout 2.5 --reastream-identifier master --reastream-host 127.0.0.1 --reastream-port 58710 --live --device 29 --blocksize 4096 --channels 2 --verbose
+
+Starting live capture (device=29).
+Using track map: {'sub': 153, 'low': 153, 'mid': 153, 'vocal': 153, 'highmid': 153, 'air': 153}
+[ANALYSIS] Janela de 0.8s (min 24000 samples) para cada ajuste.
+Traceback (most recent call last):
+  File "C:\Users\XB7U\VM\Mix_Robo\run_profile.py", line 1149, in <module>
+    main()
+    ~~~~^^
+  File "C:\Users\XB7U\VM\Mix_Robo\run_profile.py", line 1117, in main
+    with sd.InputStream(**stream_kwargs):
+         ~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "c:\Users\XB7U\VM\Mix_Robo\venv\Lib\site-packages\sounddevice.py", line 1457, in __init__
+    _StreamBase.__init__(self, kind='input', wrap_callback='array',
+    ~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                         **_remove_self(locals()))
+                         ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "c:\Users\XB7U\VM\Mix_Robo\venv\Lib\site-packages\sounddevice.py", line 914, in __init__
+    _check(_lib.Pa_OpenStream(self._ptr, iparameters, oparameters,
+    ~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                              samplerate, blocksize, stream_flags,
+                              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                              callback_ptr, userdata),
+                              ^^^^^^^^^^^^^^^^^^^^^^^^
+           f'Error opening {self.__class__.__name__}')
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "c:\Users\XB7U\VM\Mix_Robo\venv\Lib\site-packages\sounddevice.py", line 2838, in _check
+    raise PortAudioError(errormsg, err)
+sounddevice.PortAudioError: Error opening InputStream: Invalid device [PaErrorCode -9996]
+
+[DRY-RUN LOG] ended=2026-03-18T10:01:58.448565

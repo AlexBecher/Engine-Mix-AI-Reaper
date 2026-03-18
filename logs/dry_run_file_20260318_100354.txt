@@ -1,0 +1,544 @@
+[DRY-RUN LOG] started=2026-03-18T10:03:54.032301
+[DRY-RUN LOG] cwd=C:\Users\XB7U\VM\Mix_Robo
+[DRY-RUN LOG] command=c:\Users\XB7U\VM\Mix_Robo\venv\Scripts\python.exe -u run_profile.py --profile Worship-PA-Calibrated --channels 2 --analysis-interval 0.8 --webapi-host 127.0.0.1 --webapi-port 8080 --webapi-base /_ --webapi-timeout 2.5 --reastream-identifier master --reastream-host 127.0.0.1 --reastream-port 58710 --test-audio C:/Users/XB7U/VM/Mix_Robo/320.mp3 --test-speed 1.0 --verbose
+
+Starting simulated live input from WAV: C:/Users/XB7U/VM/Mix_Robo/320.mp3
+[TEST MODE] CUT-FIRST disabled for calibration
+[TEST MODE] VOCAL-FOCUS enabled for calibration
+Using track map: None
+[ANALYSIS] Janela de 0.8s (min 24000 samples) para cada ajuste.
+[C:\vcpkg\buildtrees\mpg123\src\-66150af195.clean\src\libmpg123\id3.c:process_comment():587] error: No comment text / valid description?
+Simulating live audio from C:/Users/XB7U/VM/Mix_Robo/320.mp3 (9.73s, 2 ch)... press Ctrl+C to stop.
+[PROCESS] Janela pronta (45056 samples). Processando profile 'Worship-PA-Calibrated' em stereo
+[DIAG] INPUT FFT peak_hz=321.7 prominence=193128.5 sr=48000 channels=2
+[_PROCESS_AUDIO] Chamando process() com audio shape (45056, 2), sr=48000, profile 'Worship-PA-Calibrated'
+[WEBAPI STATUS] CONFIG http://127.0.0.1:8080/_
+[WEBAPI STATUS] DRY-RUN ENABLED - Web API writes blocked
+[process] Starting audio analysis (shape=(45056, 2), duration=0.94s)
+[DIAG] DRY-RUN enabled: REAPER writes disabled for this cycle
+[DIAG] CUT-FIRST disabled: boosts allowed even when cuts are present
+[DIAG] VOCAL-FOCUS enabled: p640/p1200/p2500/p5000/p10000 mapped only to vocals/backing
+[DIAG] Active lineup scene: icon_roles
+[process] Integrated LUFS: -1.0
+[process] Band values: {'p20': 0.009756760927382337, 'p40': 0.017138149793588527, 'p80': 0.029904137230998117, 'p160': 0.0872552620147562, 'p320': 1.0, 'p640': 0.05349199042030699, 'p1200': 0.01192828970060732, 'p2500': 0.0033542434173398656, 'p5000': 0.0018941688538183419, 'p10000': 0.0008848959385896082, 'p20000': 0.0004625984903006838}
+[process] Band meter dB: {'p20': -35.447655537221394, 'p40': -30.55435341969349, 'p80': -25.718927040344724, 'p160': -16.417511915761445, 'p320': 10.399804474548791, 'p640': -20.66758379950773, 'p1200': -33.70361855110726, 'p2500': -44.731429176183624, 'p5000': -49.69633077474378, 'p10000': -56.30219655816208, 'p20000': -61.93160400718031}
+[process] Master meters: LUFS=-0.98 RMS=-3.42dB
+[process] Reference profile: {'p20': 0.8050747184131027, 'p40': 0.8349056396433026, 'p80': 0.8906915206040797, 'p160': 0.8645311185961627, 'p320': 0.9319851433949337, 'p640': 0.9354471963489919, 'p1200': 0.8627801376826768, 'p2500': 0.8510114872843451, 'p5000': 0.7441770081169169, 'p10000': 0.705637433574922, 'p20000': 0.6891772398978809}
+[DIAG] alpha (gain-align) = 1.109
+[DIAG] Effective track map: {'drums': 6, 'bass': 7, 'piano': 8, 'other': None, 'vocals': 3, 'backing_vocals': [3], 'p20': [7], 'p40': [7], 'p80': [7, 6], 'p160': [6], 'p320': [11, 8, 158], 'p640': [3], 'p1200': [3], 'p2500': [3], 'p5000': [3], 'p10000': [3], 'p20000': [6], 'sub': [], 'low': [], 'mid': [], 'highmid': [], 'air': []}
+[DIAG] Top band errors: [('p640', 0.8761488014985868), ('p80', 0.8575413737643157), ('p1200', 0.849557065835866), ('p2500', 0.8472931502207408), ('p40', 0.815907192109748), ('p20', 0.7942588886526666)]
+[DIAG] Band values (0..1): {'p20': 0.009756760927382337, 'p40': 0.017138149793588527, 'p80': 0.029904137230998117, 'p160': 0.0872552620147562, 'p320': 1.0, 'p640': 0.05349199042030699, 'p1200': 0.01192828970060732, 'p2500': 0.0033542434173398656, 'p5000': 0.0018941688538183419, 'p10000': 0.0008848959385896082, 'p20000': 0.0004625984903006838}
+[DIAG] Band meter dB: {'p20': -35.447655537221394, 'p40': -30.55435341969349, 'p80': -25.718927040344724, 'p160': -16.417511915761445, 'p320': 10.399804474548791, 'p640': -20.66758379950773, 'p1200': -33.70361855110726, 'p2500': -44.731429176183624, 'p5000': -49.69633077474378, 'p10000': -56.30219655816208, 'p20000': -61.93160400718031}
+[process] Actions to execute: [('p20', 0.7942588886526666), ('p40', 0.815907192109748), ('p80', 0.8575413737643157), ('p160', 0.7678045444105377), ('p320', -0.17656203132178472), ('p640', 0.8761488014985868), ('p1200', 0.849557065835866), ('p2500', 0.8472931502207408), ('p5000', 0.7420772325855801), ('p10000', 0.7046564846822803), ('p20000', 0.6886644276484299)]
+[process] Band 'p20' error=+0.794 -> tracks=[7]
+[process] Band 'p40' error=+0.816 -> tracks=[7]
+[process] Band 'p80' error=+0.858 -> tracks=[7, 6]
+[process] Band 'p160' error=+0.768 -> tracks=[6]
+[process] Band 'p320' error=-0.177 -> tracks=[11, 8, 158]
+[process] Band 'p640' error=+0.876 -> tracks=[3]
+[process] Band 'p1200' error=+0.850 -> tracks=[3]
+[process] Band 'p2500' error=+0.847 -> tracks=[3]
+[process] Band 'p5000' error=+0.742 -> tracks=[3]
+[process] Band 'p10000' error=+0.705 -> tracks=[3]
+[process] Band 'p20000' error=+0.689 -> tracks=[6]
+[DIAG] Active roles=['backing_vocals', 'bass', 'drums', 'other', 'piano', 'vocals'] vocal_only_content=False
+[DIAG] Track 3 role=vocals spec=+0.419dB level=+0.000dB fused=+0.210dB meter(lufs=--, rms=--)
+[process] Track 3: delta=+0.210dB target=-10.90dB step_up=0.90 step_down=1.20 applied=-10.90dB transport=WEB_API
+[DIAG] DRY-RUN: track 3 would be set to -10.90dB
+[DIAG] Track 6 role=drums spec=+0.704dB level=+0.000dB fused=+0.352dB meter(lufs=--, rms=--)
+[DIAG] Track 7 role=bass spec=+0.729dB level=+0.000dB fused=+0.364dB meter(lufs=--, rms=--)
+[process] Track 7: delta=+0.364dB target=-11.38dB step_up=0.90 step_down=1.20 applied=-11.38dB transport=WEB_API
+[DIAG] DRY-RUN: track 7 would be set to -11.38dB
+[DIAG] Track 8 role=piano spec=-0.024dB level=+0.000dB fused=-0.012dB meter(lufs=--, rms=--)
+[process] Track 8: delta=-0.012dB target=-25.85dB step_up=0.85 step_down=1.20 applied=-25.85dB transport=WEB_API
+[DIAG] DRY-RUN: track 8 would be set to -25.85dB
+[DIAG] Track 11 role=other spec=-0.048dB level=+0.000dB fused=-0.024dB meter(lufs=--, rms=--)
+[process] Track 11: delta=-0.024dB target=-17.38dB step_up=0.89 step_down=1.20 applied=-17.38dB transport=WEB_API
+[DIAG] DRY-RUN: track 11 would be set to -17.38dB
+[DIAG] Track 158 role=piano spec=-0.024dB level=+0.000dB fused=-0.012dB meter(lufs=--, rms=--)
+[process] Track 158: delta=-0.012dB target=-26.60dB step_up=0.85 step_down=1.20 applied=-26.60dB transport=WEB_API
+[DIAG] DRY-RUN: track 158 would be set to -26.60dB
+[_PROCESS_AUDIO] Retornou de process()
+[PROCESS] Janela pronta (40960 samples). Processando profile 'Worship-PA-Calibrated' em stereo
+[DIAG] INPUT FFT peak_hz=322.3 prominence=276258.5 sr=48000 channels=2
+[_PROCESS_AUDIO] Chamando process() com audio shape (40960, 2), sr=48000, profile 'Worship-PA-Calibrated'
+[process] Starting audio analysis (shape=(40960, 2), duration=0.85s)
+[DIAG] DRY-RUN enabled: REAPER writes disabled for this cycle
+[DIAG] CUT-FIRST disabled: boosts allowed even when cuts are present
+[DIAG] VOCAL-FOCUS enabled: p640/p1200/p2500/p5000/p10000 mapped only to vocals/backing
+[DIAG] Active lineup scene: icon_roles
+[process] Integrated LUFS: -0.8
+[process] Band values: {'p20': 0.007924262761055175, 'p40': 0.014133834875463297, 'p80': 0.02512695061636993, 'p160': 0.07827941177407441, 'p320': 1.0, 'p640': 0.07655562598132461, 'p1200': 0.028084724008679514, 'p2500': 0.011898023155134885, 'p5000': 0.005751645918654317, 'p10000': 0.0023572816910871087, 'p20000': 0.0009373508022404171}
+[process] Band meter dB: {'p20': -37.29885125426367, 'p40': -32.27273798830197, 'p80': -27.274690551503866, 'p160': -17.40353752368351, 'p320': 10.397663403918344, 'p640': -17.596965830510346, 'p1200': -26.308427703082646, 'p2500': -33.76908432951254, 'p5000': -40.082253146469, 'p10000': -47.82978540287829, 'p20000': -55.8397569788017}
+[process] Master meters: LUFS=-0.83 RMS=-3.01dB
+[process] Reference profile: {'p20': 0.8050747184131027, 'p40': 0.8349056396433026, 'p80': 0.8906915206040797, 'p160': 0.8645311185961627, 'p320': 0.9319851433949337, 'p640': 0.9354471963489919, 'p1200': 0.8627801376826768, 'p2500': 0.8510114872843451, 'p5000': 0.7441770081169169, 'p10000': 0.705637433574922, 'p20000': 0.6891772398978809}
+[DIAG] alpha (gain-align) = 1.137
+[DIAG] Effective track map: {'drums': 6, 'bass': 7, 'piano': 8, 'other': None, 'vocals': 3, 'backing_vocals': [3], 'p20': [7], 'p40': [7], 'p80': [7, 6], 'p160': [6], 'p320': [11, 8, 158], 'p640': [3], 'p1200': [3], 'p2500': [3], 'p5000': [3], 'p10000': [3], 'p20000': [6], 'sub': [], 'low': [], 'mid': [], 'highmid': [], 'air': []}
+[DIAG] Top band errors: [('p80', 0.8621214274857357), ('p640', 0.8484011637279614), ('p2500', 0.8374830796929775), ('p1200', 0.830846967900896), ('p40', 0.8188350473666492), ('p20', 0.796064595042618)]
+[DIAG] Band values (0..1): {'p20': 0.007924262761055175, 'p40': 0.014133834875463297, 'p80': 0.02512695061636993, 'p160': 0.07827941177407441, 'p320': 1.0, 'p640': 0.07655562598132461, 'p1200': 0.028084724008679514, 'p2500': 0.011898023155134885, 'p5000': 0.005751645918654317, 'p10000': 0.0023572816910871087, 'p20000': 0.0009373508022404171}
+[DIAG] Band meter dB: {'p20': -37.29885125426367, 'p40': -32.27273798830197, 'p80': -27.274690551503866, 'p160': -17.40353752368351, 'p320': 10.397663403918344, 'p640': -17.596965830510346, 'p1200': -26.308427703082646, 'p2500': -33.76908432951254, 'p5000': -40.082253146469, 'p10000': -47.82978540287829, 'p20000': -55.8397569788017}
+[process] Actions to execute: [('p20', 0.796064595042618), ('p40', 0.8188350473666492), ('p80', 0.8621214274857357), ('p160', 0.7755250900581245), ('p320', -0.20504471568119687), ('p640', 0.8484011637279614), ('p1200', 0.830846967900896), ('p2500', 0.8374830796929775), ('p5000', 0.7376372149685736), ('p10000', 0.7029571339059025), ('p20000', 0.6881114440473046)]
+[process] Band 'p20' error=+0.796 -> tracks=[7]
+[process] Band 'p40' error=+0.819 -> tracks=[7]
+[process] Band 'p80' error=+0.862 -> tracks=[7, 6]
+[process] Band 'p160' error=+0.776 -> tracks=[6]
+[process] Band 'p320' error=-0.205 -> tracks=[11, 8, 158]
+[process] Band 'p640' error=+0.848 -> tracks=[3]
+[process] Band 'p1200' error=+0.831 -> tracks=[3]
+[process] Band 'p2500' error=+0.837 -> tracks=[3]
+[process] Band 'p5000' error=+0.738 -> tracks=[3]
+[process] Band 'p10000' error=+0.703 -> tracks=[3]
+[process] Band 'p20000' error=+0.688 -> tracks=[6]
+[DIAG] Active roles=['backing_vocals', 'bass', 'drums', 'other', 'piano', 'vocals'] vocal_only_content=False
+[DIAG] Track 3 role=vocals spec=+0.415dB level=+0.000dB fused=+0.208dB meter(lufs=--, rms=--)
+[process] Track 3: delta=+0.208dB target=-10.69dB step_up=0.90 step_down=1.20 applied=-10.69dB transport=WEB_API
+[DIAG] DRY-RUN: track 3 would be set to -10.69dB
+[DIAG] Track 6 role=drums spec=+0.707dB level=+0.000dB fused=+0.354dB meter(lufs=--, rms=--)
+[DIAG] Track 7 role=bass spec=+0.731dB level=+0.000dB fused=+0.366dB meter(lufs=--, rms=--)
+[process] Track 7: delta=+0.366dB target=-11.01dB step_up=0.90 step_down=1.20 applied=-11.01dB transport=WEB_API
+[DIAG] DRY-RUN: track 7 would be set to -11.01dB
+[DIAG] Track 8 role=piano spec=-0.034dB level=+0.000dB fused=-0.017dB meter(lufs=--, rms=--)
+[process] Track 8: delta=-0.017dB target=-25.87dB step_up=0.86 step_down=1.20 applied=-25.87dB transport=WEB_API
+[DIAG] DRY-RUN: track 8 would be set to -25.87dB
+[DIAG] Track 11 role=other spec=-0.059dB level=+0.000dB fused=-0.030dB meter(lufs=--, rms=--)
+[process] Track 11: delta=-0.030dB target=-17.41dB step_up=0.90 step_down=1.20 applied=-17.41dB transport=WEB_API
+[DIAG] DRY-RUN: track 11 would be set to -17.41dB
+[DIAG] Track 158 role=piano spec=-0.034dB level=+0.000dB fused=-0.017dB meter(lufs=--, rms=--)
+[process] Track 158: delta=-0.017dB target=-26.62dB step_up=0.86 step_down=1.20 applied=-26.62dB transport=WEB_API
+[DIAG] DRY-RUN: track 158 would be set to -26.62dB
+[_PROCESS_AUDIO] Retornou de process()
+[PROCESS] Janela pronta (40960 samples). Processando profile 'Worship-PA-Calibrated' em stereo
+[DIAG] INPUT FFT peak_hz=322.3 prominence=1019056.7 sr=48000 channels=2
+[_PROCESS_AUDIO] Chamando process() com audio shape (40960, 2), sr=48000, profile 'Worship-PA-Calibrated'
+[process] Starting audio analysis (shape=(40960, 2), duration=0.85s)
+[DIAG] DRY-RUN enabled: REAPER writes disabled for this cycle
+[DIAG] CUT-FIRST disabled: boosts allowed even when cuts are present
+[DIAG] VOCAL-FOCUS enabled: p640/p1200/p2500/p5000/p10000 mapped only to vocals/backing
+[DIAG] Active lineup scene: icon_roles
+[process] Integrated LUFS: -0.8
+[process] Band values: {'p20': 0.003584445678416659, 'p40': 0.0066977166267224615, 'p80': 0.013741833118796475, 'p160': 0.05797852884437438, 'p320': 1.0, 'p640': 0.0916539837998947, 'p1200': 0.037465699083120675, 'p2500': 0.016609387956070136, 'p5000': 0.007424145894247043, 'p10000': 0.0030813838622409636, 'p20000': 0.0012190005865868932}
+[process] Band meter dB: {'p20': -44.141634465146524, 'p40': -38.70886357139268, 'p80': -32.46061044246255, 'p160': -19.950976818990114, 'p320': 10.39755400234018, 'p640': -15.972650803348845, 'p1200': -23.743098282643537, 'p2500': -30.808736592138843, 'p5000': -37.80291770204209, 'p10000': -45.440948727820306, 'p20000': -53.4956989880738}
+[process] Master meters: LUFS=-0.83 RMS=-3.01dB
+[process] Reference profile: {'p20': 0.8050747184131027, 'p40': 0.8349056396433026, 'p80': 0.8906915206040797, 'p160': 0.8645311185961627, 'p320': 0.9319851433949337, 'p640': 0.9354471963489919, 'p1200': 0.8627801376826768, 'p2500': 0.8510114872843451, 'p5000': 0.7441770081169169, 'p10000': 0.705637433574922, 'p20000': 0.6891772398978809}
+[DIAG] alpha (gain-align) = 1.128
+[DIAG] Effective track map: {'drums': 6, 'bass': 7, 'piano': 8, 'other': None, 'vocals': 3, 'backing_vocals': [3], 'p20': [7], 'p40': [7], 'p80': [7, 6], 'p160': [6], 'p320': [11, 8, 158], 'p640': [3], 'p1200': [3], 'p2500': [3], 'p5000': [3], 'p10000': [3], 'p20000': [6], 'sub': [], 'low': [], 'mid': [], 'highmid': [], 'air': []}
+[DIAG] Top band errors: [('p80', 0.8751900772051517), ('p2500', 0.8322753052141609), ('p640', 0.8320571296906388), ('p40', 0.8273502957314933), ('p1200', 0.8205170415791543), ('p20', 0.8010312926692327)]
+[DIAG] Band values (0..1): {'p20': 0.003584445678416659, 'p40': 0.0066977166267224615, 'p80': 0.013741833118796475, 'p160': 0.05797852884437438, 'p320': 1.0, 'p640': 0.0916539837998947, 'p1200': 0.037465699083120675, 'p2500': 0.016609387956070136, 'p5000': 0.007424145894247043, 'p10000': 0.0030813838622409636, 'p20000': 0.0012190005865868932}
+[DIAG] Band meter dB: {'p20': -44.141634465146524, 'p40': -38.70886357139268, 'p80': -32.46061044246255, 'p160': -19.950976818990114, 'p320': 10.39755400234018, 'p640': -15.972650803348845, 'p1200': -23.743098282643537, 'p2500': -30.808736592138843, 'p5000': -37.80291770204209, 'p10000': -45.440948727820306, 'p20000': -53.4956989880738}
+[process] Actions to execute: [('p20', 0.8010312926692327), ('p40', 0.8273502957314933), ('p80', 0.8751900772051517), ('p160', 0.7991285718278683), ('p320', -0.19606256791984544), ('p640', 0.8320571296906388), ('p1200', 0.8205170415791543), ('p2500', 0.8322753052141609), ('p5000', 0.7358022173324446), ('p10000', 0.7021614855614389), ('p20000', 0.6878021490760902)]
+[process] Band 'p20' error=+0.801 -> tracks=[7]
+[process] Band 'p40' error=+0.827 -> tracks=[7]
+[process] Band 'p80' error=+0.875 -> tracks=[7, 6]
+[process] Band 'p160' error=+0.799 -> tracks=[6]
+[process] Band 'p320' error=-0.196 -> tracks=[11, 8, 158]
+[process] Band 'p640' error=+0.832 -> tracks=[3]
+[process] Band 'p1200' error=+0.821 -> tracks=[3]
+[process] Band 'p2500' error=+0.832 -> tracks=[3]
+[process] Band 'p5000' error=+0.736 -> tracks=[3]
+[process] Band 'p10000' error=+0.702 -> tracks=[3]
+[process] Band 'p20000' error=+0.688 -> tracks=[6]
+[DIAG] Active roles=['backing_vocals', 'bass', 'drums', 'other', 'piano', 'vocals'] vocal_only_content=False
+[DIAG] Track 3 role=vocals spec=+0.410dB level=+0.000dB fused=+0.205dB meter(lufs=--, rms=--)
+[process] Track 3: delta=+0.205dB target=-10.49dB step_up=0.90 step_down=1.20 applied=-10.49dB transport=WEB_API
+[DIAG] DRY-RUN: track 3 would be set to -10.49dB
+[DIAG] Track 6 role=drums spec=+0.719dB level=+0.000dB fused=+0.359dB meter(lufs=--, rms=--)
+[DIAG] Track 7 role=bass spec=+0.738dB level=+0.000dB fused=+0.369dB meter(lufs=--, rms=--)
+[process] Track 7: delta=+0.369dB target=-10.64dB step_up=0.90 step_down=1.20 applied=-10.64dB transport=WEB_API
+[DIAG] DRY-RUN: track 7 would be set to -10.64dB
+[DIAG] Track 8 role=piano spec=-0.037dB level=+0.000dB fused=-0.019dB meter(lufs=--, rms=--)
+[process] Track 8: delta=-0.019dB target=-25.89dB step_up=0.87 step_down=1.20 applied=-25.89dB transport=WEB_API
+[DIAG] DRY-RUN: track 8 would be set to -25.89dB
+[DIAG] Track 11 role=other spec=-0.063dB level=+0.000dB fused=-0.032dB meter(lufs=--, rms=--)
+[process] Track 11: delta=-0.032dB target=-17.45dB step_up=0.90 step_down=1.20 applied=-17.45dB transport=WEB_API
+[DIAG] DRY-RUN: track 11 would be set to -17.45dB
+[DIAG] Track 158 role=piano spec=-0.037dB level=+0.000dB fused=-0.019dB meter(lufs=--, rms=--)
+[process] Track 158: delta=-0.019dB target=-26.64dB step_up=0.87 step_down=1.20 applied=-26.64dB transport=WEB_API
+[DIAG] DRY-RUN: track 158 would be set to -26.64dB
+[_PROCESS_AUDIO] Retornou de process()
+[PROCESS] Janela pronta (40960 samples). Processando profile 'Worship-PA-Calibrated' em stereo
+[DIAG] INPUT FFT peak_hz=322.3 prominence=267661.7 sr=48000 channels=2
+[_PROCESS_AUDIO] Chamando process() com audio shape (40960, 2), sr=48000, profile 'Worship-PA-Calibrated'
+[process] Starting audio analysis (shape=(40960, 2), duration=0.85s)
+[DIAG] DRY-RUN enabled: REAPER writes disabled for this cycle
+[DIAG] CUT-FIRST disabled: boosts allowed even when cuts are present
+[DIAG] VOCAL-FOCUS enabled: p640/p1200/p2500/p5000/p10000 mapped only to vocals/backing
+[DIAG] Active lineup scene: icon_roles
+[process] Integrated LUFS: -0.8
+[process] Band values: {'p20': 0.010461616475205862, 'p40': 0.01856533076953948, 'p80': 0.032279614524168374, 'p160': 0.092573711875863, 'p320': 1.0, 'p640': 0.055538044953074725, 'p1200': 0.012138365238439284, 'p2500': 0.003074555286858365, 'p5000': 0.0012067007513231766, 'p10000': 0.0005828888705545929, 'p20000': 0.0003285668163361602}
+[process] Band meter dB: {'p20': -34.81893413648059, 'p40': -29.83685608529086, 'p80': -25.03237360306039, 'p160': -15.88115186379057, 'p320': 10.398068778351844, 'p640': -20.319083328953766, 'p1200': -33.528577201770304, 'p2500': -45.47054779840511, 'p5000': -53.58899410642047, 'p10000': -59.90494448001424, 'p20000': -64.881966237803}
+[process] Master meters: LUFS=-0.83 RMS=-3.02dB
+[process] Reference profile: {'p20': 0.8050747184131027, 'p40': 0.8349056396433026, 'p80': 0.8906915206040797, 'p160': 0.8645311185961627, 'p320': 0.9319851433949337, 'p640': 0.9354471963489919, 'p1200': 0.8627801376826768, 'p2500': 0.8510114872843451, 'p5000': 0.7441770081169169, 'p10000': 0.705637433574922, 'p20000': 0.6891772398978809}
+[DIAG] alpha (gain-align) = 1.116
+[DIAG] Effective track map: {'drums': 6, 'bass': 7, 'piano': 8, 'other': None, 'vocals': 3, 'backing_vocals': [3], 'p20': [7], 'p40': [7], 'p80': [7, 6], 'p160': [6], 'p320': [11, 8, 158], 'p640': [3], 'p1200': [3], 'p2500': [3], 'p5000': [3], 'p10000': [3], 'p20000': [6], 'sub': [], 'low': [], 'mid': [], 'highmid': [], 'air': []}
+[DIAG] Top band errors: [('p640', 0.8734438982080209), ('p80', 0.8546541958313283), ('p1200', 0.849228730184288), ('p2500', 0.8475790191759871), ('p40', 0.8141790955281452), ('p20', 0.7933952520959728)]
+[DIAG] Band values (0..1): {'p20': 0.010461616475205862, 'p40': 0.01856533076953948, 'p80': 0.032279614524168374, 'p160': 0.092573711875863, 'p320': 1.0, 'p640': 0.055538044953074725, 'p1200': 0.012138365238439284, 'p2500': 0.003074555286858365, 'p5000': 0.0012067007513231766, 'p10000': 0.0005828888705545929, 'p20000': 0.0003285668163361602}
+[DIAG] Band meter dB: {'p20': -34.81893413648059, 'p40': -29.83685608529086, 'p80': -25.03237360306039, 'p160': -15.88115186379057, 'p320': 10.398068778351844, 'p640': -20.319083328953766, 'p1200': -33.528577201770304, 'p2500': -45.47054779840511, 'p5000': -53.58899410642047, 'p10000': -59.90494448001424, 'p20000': -64.881966237803}
+[process] Actions to execute: [('p20', 0.7933952520959728), ('p40', 0.8141790955281452), ('p80', 0.8546541958313283), ('p160', 0.761180785283112), ('p320', -0.1844261057471418), ('p640', 0.8734438982080209), ('p1200', 0.849228730184288), ('p2500', 0.8475790191759871), ('p5000', 0.7428298338237915), ('p10000', 0.7049866898828352), ('p20000', 0.6888104242080284)]
+[process] Band 'p20' error=+0.793 -> tracks=[7]
+[process] Band 'p40' error=+0.814 -> tracks=[7]
+[process] Band 'p80' error=+0.855 -> tracks=[7, 6]
+[process] Band 'p160' error=+0.761 -> tracks=[6]
+[process] Band 'p320' error=-0.184 -> tracks=[11, 8, 158]
+[process] Band 'p640' error=+0.873 -> tracks=[3]
+[process] Band 'p1200' error=+0.849 -> tracks=[3]
+[process] Band 'p2500' error=+0.848 -> tracks=[3]
+[process] Band 'p5000' error=+0.743 -> tracks=[3]
+[process] Band 'p10000' error=+0.705 -> tracks=[3]
+[process] Band 'p20000' error=+0.689 -> tracks=[6]
+[DIAG] Active roles=['backing_vocals', 'bass', 'drums', 'other', 'piano', 'vocals'] vocal_only_content=False
+[DIAG] Track 3 role=vocals spec=+0.413dB level=+0.000dB fused=+0.207dB meter(lufs=--, rms=--)
+[process] Track 3: delta=+0.207dB target=-10.28dB step_up=0.90 step_down=1.20 applied=-10.28dB transport=WEB_API
+[DIAG] DRY-RUN: track 3 would be set to -10.28dB
+[DIAG] Track 6 role=drums spec=+0.705dB level=+0.000dB fused=+0.352dB meter(lufs=--, rms=--)
+[DIAG] Track 7 role=bass spec=+0.730dB level=+0.000dB fused=+0.365dB meter(lufs=--, rms=--)
+[process] Track 7: delta=+0.365dB target=-10.28dB step_up=0.90 step_down=1.20 applied=-10.28dB transport=WEB_API
+[DIAG] DRY-RUN: track 7 would be set to -10.28dB
+[DIAG] Track 8 role=piano spec=-0.035dB level=+0.000dB fused=-0.018dB meter(lufs=--, rms=--)
+[process] Track 8: delta=-0.018dB target=-25.90dB step_up=0.87 step_down=1.20 applied=-25.90dB transport=WEB_API
+[DIAG] DRY-RUN: track 8 would be set to -25.90dB
+[DIAG] Track 11 role=other spec=-0.061dB level=+0.000dB fused=-0.030dB meter(lufs=--, rms=--)
+[process] Track 11: delta=-0.030dB target=-17.48dB step_up=0.90 step_down=1.20 applied=-17.48dB transport=WEB_API
+[DIAG] DRY-RUN: track 11 would be set to -17.48dB
+[DIAG] Track 158 role=piano spec=-0.035dB level=+0.000dB fused=-0.018dB meter(lufs=--, rms=--)
+[process] Track 158: delta=-0.018dB target=-26.65dB step_up=0.87 step_down=1.20 applied=-26.65dB transport=WEB_API
+[DIAG] DRY-RUN: track 158 would be set to -26.65dB
+[_PROCESS_AUDIO] Retornou de process()
+[PROCESS] Janela pronta (40960 samples). Processando profile 'Worship-PA-Calibrated' em stereo
+[DIAG] INPUT FFT peak_hz=322.3 prominence=537090.1 sr=48000 channels=2
+[_PROCESS_AUDIO] Chamando process() com audio shape (40960, 2), sr=48000, profile 'Worship-PA-Calibrated'
+[process] Starting audio analysis (shape=(40960, 2), duration=0.85s)
+[DIAG] DRY-RUN enabled: REAPER writes disabled for this cycle
+[DIAG] CUT-FIRST disabled: boosts allowed even when cuts are present
+[DIAG] VOCAL-FOCUS enabled: p640/p1200/p2500/p5000/p10000 mapped only to vocals/backing
+[DIAG] Active lineup scene: icon_roles
+[process] Integrated LUFS: -0.8
+[process] Band values: {'p20': 0.004848036849953441, 'p40': 0.008869426560785062, 'p80': 0.016848488097612857, 'p160': 0.06297614419785129, 'p320': 1.0, 'p640': 0.08875048593474116, 'p1200': 0.035718402931185333, 'p2500': 0.015598779673525149, 'p5000': 0.007279817388378218, 'p10000': 0.0030015651506953255, 'p20000': 0.0011749485051633281}
+[process] Band meter dB: {'p20': -41.52271805736377, 'p40': -36.27500084756012, 'p80': -30.70036981433976, 'p160': -19.246142970058045, 'p320': 10.397535777328223, 'p640': -16.265546410875764, 'p1200': -24.171355817759647, 'p2500': -31.367432715347043, 'p5000': -37.986803704605876, 'p10000': -45.682216476620326, 'p20000': -53.82874755458276}
+[process] Master meters: LUFS=-0.83 RMS=-3.01dB
+[process] Reference profile: {'p20': 0.8050747184131027, 'p40': 0.8349056396433026, 'p80': 0.8906915206040797, 'p160': 0.8645311185961627, 'p320': 0.9319851433949337, 'p640': 0.9354471963489919, 'p1200': 0.8627801376826768, 'p2500': 0.8510114872843451, 'p5000': 0.7441770081169169, 'p10000': 0.705637433574922, 'p20000': 0.6891772398978809}
+[DIAG] alpha (gain-align) = 1.133
+[DIAG] Effective track map: {'drums': 6, 'bass': 7, 'piano': 8, 'other': None, 'vocals': 3, 'backing_vocals': [3], 'p20': [7], 'p40': [7], 'p80': [7, 6], 'p160': [6], 'p320': [11, 8, 158], 'p640': [3], 'p1200': [3], 'p2500': [3], 'p5000': [3], 'p10000': [3], 'p20000': [6], 'sub': [], 'low': [], 'mid': [], 'highmid': [], 'air': []}
+[DIAG] Top band errors: [('p80', 0.8716095729633166), ('p640', 0.8349318197830105), ('p2500', 0.8333449111936286), ('p40', 0.824860469284042), ('p1200', 0.8223268524623177), ('p20', 0.7995840189037261)]
+[DIAG] Band values (0..1): {'p20': 0.004848036849953441, 'p40': 0.008869426560785062, 'p80': 0.016848488097612857, 'p160': 0.06297614419785129, 'p320': 1.0, 'p640': 0.08875048593474116, 'p1200': 0.035718402931185333, 'p2500': 0.015598779673525149, 'p5000': 0.007279817388378218, 'p10000': 0.0030015651506953255, 'p20000': 0.0011749485051633281}
+[DIAG] Band meter dB: {'p20': -41.52271805736377, 'p40': -36.27500084756012, 'p80': -30.70036981433976, 'p160': -19.246142970058045, 'p320': 10.397535777328223, 'p640': -16.265546410875764, 'p1200': -24.171355817759647, 'p2500': -31.367432715347043, 'p5000': -37.986803704605876, 'p10000': -45.682216476620326, 'p20000': -53.82874755458276}
+[process] Actions to execute: [('p20', 0.7995840189037261), ('p40', 0.824860469284042), ('p80', 0.8716095729633166), ('p160', 0.793206767162469), ('p320', -0.2005762787463613), ('p640', 0.8349318197830105), ('p1200', 0.8223268524623177), ('p2500', 0.8333449111936286), ('p5000', 0.7359321677826063), ('p10000', 0.7022379766792007), ('p20000', 0.6878465385479303)]
+[process] Band 'p20' error=+0.800 -> tracks=[7]
+[process] Band 'p40' error=+0.825 -> tracks=[7]
+[process] Band 'p80' error=+0.872 -> tracks=[7, 6]
+[process] Band 'p160' error=+0.793 -> tracks=[6]
+[process] Band 'p320' error=-0.201 -> tracks=[11, 8, 158]
+[process] Band 'p640' error=+0.835 -> tracks=[3]
+[process] Band 'p1200' error=+0.822 -> tracks=[3]
+[process] Band 'p2500' error=+0.833 -> tracks=[3]
+[process] Band 'p5000' error=+0.736 -> tracks=[3]
+[process] Band 'p10000' error=+0.702 -> tracks=[3]
+[process] Band 'p20000' error=+0.688 -> tracks=[6]
+[DIAG] Active roles=['backing_vocals', 'bass', 'drums', 'other', 'piano', 'vocals'] vocal_only_content=False
+[DIAG] Track 3 role=vocals spec=+0.409dB level=+0.000dB fused=+0.205dB meter(lufs=--, rms=--)
+[process] Track 3: delta=+0.205dB target=-10.08dB step_up=0.90 step_down=1.20 applied=-10.08dB transport=WEB_API
+[DIAG] DRY-RUN: track 3 would be set to -10.08dB
+[DIAG] Track 6 role=drums spec=+0.716dB level=+0.000dB fused=+0.358dB meter(lufs=--, rms=--)
+[DIAG] Track 7 role=bass spec=+0.736dB level=+0.000dB fused=+0.368dB meter(lufs=--, rms=--)
+[process] Track 7: delta=+0.368dB target=-9.91dB step_up=0.90 step_down=1.20 applied=-9.91dB transport=WEB_API
+[DIAG] DRY-RUN: track 7 would be set to -9.91dB
+[DIAG] Track 8 role=piano spec=-0.040dB level=+0.000dB fused=-0.020dB meter(lufs=--, rms=--)
+[process] Track 8: delta=-0.020dB target=-25.92dB step_up=0.88 step_down=1.20 applied=-25.92dB transport=WEB_API
+[DIAG] DRY-RUN: track 8 would be set to -25.92dB
+[DIAG] Track 11 role=other spec=-0.066dB level=+0.000dB fused=-0.033dB meter(lufs=--, rms=--)
+[process] Track 11: delta=-0.033dB target=-17.51dB step_up=0.90 step_down=1.20 applied=-17.51dB transport=WEB_API
+[DIAG] DRY-RUN: track 11 would be set to -17.51dB
+[DIAG] Track 158 role=piano spec=-0.040dB level=+0.000dB fused=-0.020dB meter(lufs=--, rms=--)
+[process] Track 158: delta=-0.020dB target=-26.67dB step_up=0.88 step_down=1.20 applied=-26.67dB transport=WEB_API
+[DIAG] DRY-RUN: track 158 would be set to -26.67dB
+[_PROCESS_AUDIO] Retornou de process()
+[PROCESS] Janela pronta (40960 samples). Processando profile 'Worship-PA-Calibrated' em stereo
+[DIAG] INPUT FFT peak_hz=322.3 prominence=794596.0 sr=48000 channels=2
+[_PROCESS_AUDIO] Chamando process() com audio shape (40960, 2), sr=48000, profile 'Worship-PA-Calibrated'
+[process] Starting audio analysis (shape=(40960, 2), duration=0.85s)
+[DIAG] DRY-RUN enabled: REAPER writes disabled for this cycle
+[DIAG] CUT-FIRST disabled: boosts allowed even when cuts are present
+[DIAG] VOCAL-FOCUS enabled: p640/p1200/p2500/p5000/p10000 mapped only to vocals/backing
+[DIAG] Active lineup scene: icon_roles
+[process] Integrated LUFS: -0.8
+[process] Band values: {'p20': 0.006829717492353423, 'p40': 0.012249560278722055, 'p80': 0.022179666574229588, 'p160': 0.07258262198004109, 'p320': 1.0, 'p640': 0.08195079008339459, 'p1200': 0.03143357498575195, 'p2500': 0.013780224214781485, 'p5000': 0.006023242746768692, 'p10000': 0.002532534470294351, 'p20000': 0.0010223127470693457}
+[process] Band meter dB: {'p20': -38.57444984028504, 'p40': -33.50015366260469, 'p80': -28.342791716600736, 'p160': -18.043605765096128, 'p320': 10.39755297522857, 'p640': -16.98894780169134, 'p1200': -25.312735088565233, 'p2500': -32.475671152270934, 'p5000': -39.664455926810305, 'p10000': -47.189763331386516, 'p20000': -55.06892689801985}
+[process] Master meters: LUFS=-0.83 RMS=-3.01dB
+[process] Reference profile: {'p20': 0.8050747184131027, 'p40': 0.8349056396433026, 'p80': 0.8906915206040797, 'p160': 0.8645311185961627, 'p320': 0.9319851433949337, 'p640': 0.9354471963489919, 'p1200': 0.8627801376826768, 'p2500': 0.8510114872843451, 'p5000': 0.7441770081169169, 'p10000': 0.705637433574922, 'p20000': 0.6891772398978809}
+[DIAG] alpha (gain-align) = 1.137
+[DIAG] Effective track map: {'drums': 6, 'bass': 7, 'piano': 8, 'other': None, 'vocals': 3, 'backing_vocals': [3], 'p20': [7], 'p40': [7], 'p80': [7, 6], 'p160': [6], 'p320': [11, 8, 158], 'p640': [3], 'p1200': [3], 'p2500': [3], 'p5000': [3], 'p10000': [3], 'p20000': [6], 'sub': [], 'low': [], 'mid': [], 'highmid': [], 'air': []}
+[DIAG] Top band errors: [('p80', 0.8654754290090244), ('p640', 0.8422772371832821), ('p2500', 0.835344732563872), ('p1200', 0.8270432656540542), ('p40', 0.8209790987300907), ('p20', 0.797310003768761)]
+[DIAG] Band values (0..1): {'p20': 0.006829717492353423, 'p40': 0.012249560278722055, 'p80': 0.022179666574229588, 'p160': 0.07258262198004109, 'p320': 1.0, 'p640': 0.08195079008339459, 'p1200': 0.03143357498575195, 'p2500': 0.013780224214781485, 'p5000': 0.006023242746768692, 'p10000': 0.002532534470294351, 'p20000': 0.0010223127470693457}
+[DIAG] Band meter dB: {'p20': -38.57444984028504, 'p40': -33.50015366260469, 'p80': -28.342791716600736, 'p160': -18.043605765096128, 'p320': 10.39755297522857, 'p640': -16.98894780169134, 'p1200': -25.312735088565233, 'p2500': -32.475671152270934, 'p5000': -39.664455926810305, 'p10000': -47.189763331386516, 'p20000': -55.06892689801985}
+[process] Actions to execute: [('p20', 0.797310003768761), ('p40', 0.8209790987300907), ('p80', 0.8654754290090244), ('p160', 0.7820118418553416), ('p320', -0.20491614908679134), ('p640', 0.8422772371832821), ('p1200', 0.8270432656540542), ('p2500', 0.835344732563872), ('p5000', 0.7373291756531843), ('p10000', 0.7027581918623899), ('p20000', 0.6880149712144172)]
+[process] Band 'p20' error=+0.797 -> tracks=[7]
+[process] Band 'p40' error=+0.821 -> tracks=[7]
+[process] Band 'p80' error=+0.865 -> tracks=[7, 6]
+[process] Band 'p160' error=+0.782 -> tracks=[6]
+[process] Band 'p320' error=-0.205 -> tracks=[11, 8, 158]
+[process] Band 'p640' error=+0.842 -> tracks=[3]
+[process] Band 'p1200' error=+0.827 -> tracks=[3]
+[process] Band 'p2500' error=+0.835 -> tracks=[3]
+[process] Band 'p5000' error=+0.737 -> tracks=[3]
+[process] Band 'p10000' error=+0.703 -> tracks=[3]
+[process] Band 'p20000' error=+0.688 -> tracks=[6]
+[DIAG] Active roles=['backing_vocals', 'bass', 'drums', 'other', 'piano', 'vocals'] vocal_only_content=False
+[DIAG] Track 3 role=vocals spec=+0.408dB level=+0.000dB fused=+0.204dB meter(lufs=--, rms=--)
+[process] Track 3: delta=+0.204dB target=-9.87dB step_up=0.90 step_down=1.20 applied=-9.87dB transport=WEB_API
+[DIAG] DRY-RUN: track 3 would be set to -9.87dB
+[DIAG] Track 6 role=drums spec=+0.713dB level=+0.000dB fused=+0.357dB meter(lufs=--, rms=--)
+[DIAG] Track 7 role=bass spec=+0.734dB level=+0.000dB fused=+0.367dB meter(lufs=--, rms=--)
+[process] Track 7: delta=+0.367dB target=-9.54dB step_up=0.90 step_down=1.20 applied=-9.54dB transport=WEB_API
+[DIAG] DRY-RUN: track 7 would be set to -9.54dB
+[DIAG] Track 8 role=piano spec=-0.044dB level=+0.000dB fused=-0.022dB meter(lufs=--, rms=--)
+[process] Track 8: delta=-0.022dB target=-25.95dB step_up=0.88 step_down=1.20 applied=-25.95dB transport=WEB_API
+[DIAG] DRY-RUN: track 8 would be set to -25.95dB
+[DIAG] Track 11 role=other spec=-0.071dB level=+0.000dB fused=-0.035dB meter(lufs=--, rms=--)
+[process] Track 11: delta=-0.035dB target=-17.54dB step_up=0.90 step_down=1.20 applied=-17.54dB transport=WEB_API
+[DIAG] DRY-RUN: track 11 would be set to -17.54dB
+[DIAG] Track 158 role=piano spec=-0.044dB level=+0.000dB fused=-0.022dB meter(lufs=--, rms=--)
+[process] Track 158: delta=-0.022dB target=-26.70dB step_up=0.88 step_down=1.20 applied=-26.70dB transport=WEB_API
+[DIAG] DRY-RUN: track 158 would be set to -26.70dB
+[_PROCESS_AUDIO] Retornou de process()
+[PROCESS] Janela pronta (40960 samples). Processando profile 'Worship-PA-Calibrated' em stereo
+[DIAG] INPUT FFT peak_hz=322.3 prominence=720520.3 sr=48000 channels=2
+[_PROCESS_AUDIO] Chamando process() com audio shape (40960, 2), sr=48000, profile 'Worship-PA-Calibrated'
+[process] Starting audio analysis (shape=(40960, 2), duration=0.85s)
+[DIAG] DRY-RUN enabled: REAPER writes disabled for this cycle
+[DIAG] CUT-FIRST disabled: boosts allowed even when cuts are present
+[DIAG] VOCAL-FOCUS enabled: p640/p1200/p2500/p5000/p10000 mapped only to vocals/backing
+[DIAG] Active lineup scene: icon_roles
+[process] Integrated LUFS: -0.8
+[process] Band values: {'p20': 0.010026858709994998, 'p40': 0.017817807304642296, 'p80': 0.03115953087815826, 'p160': 0.08994706586521953, 'p320': 1.0, 'p640': 0.059819505329355344, 'p1200': 0.016174879314045095, 'p2500': 0.00564448776515238, 'p5000': 0.003005207538914558, 'p10000': 0.0012496539221694206, 'p20000': 0.0005331460750442464}
+[process] Band meter dB: {'p20': -35.19978032112705, 'p40': -30.205953344347307, 'p80': -25.35115238696486, 'p160': -16.14321046715028, 'p320': 10.398048384858756, 'p640': -19.68643353870943, 'p1200': -31.051303716646643, 'p2500': -40.205311993729396, 'p5000': -45.676753582668226, 'p10000': -53.2974872476163, 'p20000': -60.69322355783373}
+[process] Master meters: LUFS=-0.82 RMS=-3.01dB
+[process] Reference profile: {'p20': 0.8050747184131027, 'p40': 0.8349056396433026, 'p80': 0.8906915206040797, 'p160': 0.8645311185961627, 'p320': 0.9319851433949337, 'p640': 0.9354471963489919, 'p1200': 0.8627801376826768, 'p2500': 0.8510114872843451, 'p5000': 0.7441770081169169, 'p10000': 0.705637433574922, 'p20000': 0.6891772398978809}
+[DIAG] alpha (gain-align) = 1.124
+[DIAG] Effective track map: {'drums': 6, 'bass': 7, 'piano': 8, 'other': None, 'vocals': 3, 'backing_vocals': [3], 'p20': [7], 'p40': [7], 'p80': [7, 6], 'p160': [6], 'p320': [11, 8, 158], 'p640': [3], 'p1200': [3], 'p2500': [3], 'p5000': [3], 'p10000': [3], 'p20000': [6], 'sub': [], 'low': [], 'mid': [], 'highmid': [], 'air': []}
+[DIAG] Top band errors: [('p640', 0.8682317519081907), ('p80', 0.8556795006114222), ('p2500', 0.8446691286893268), ('p1200', 0.8446054353697117), ('p40', 0.8148848816923944), ('p20', 0.7938081631176898)]
+[DIAG] Band values (0..1): {'p20': 0.010026858709994998, 'p40': 0.017817807304642296, 'p80': 0.03115953087815826, 'p160': 0.08994706586521953, 'p320': 1.0, 'p640': 0.059819505329355344, 'p1200': 0.016174879314045095, 'p2500': 0.00564448776515238, 'p5000': 0.003005207538914558, 'p10000': 0.0012496539221694206, 'p20000': 0.0005331460750442464}
+[DIAG] Band meter dB: {'p20': -35.19978032112705, 'p40': -30.205953344347307, 'p80': -25.35115238696486, 'p160': -16.14321046715028, 'p320': 10.398048384858756, 'p640': -19.68643353870943, 'p1200': -31.051303716646643, 'p2500': -40.205311993729396, 'p5000': -45.676753582668226, 'p10000': -53.2974872476163, 'p20000': -60.69322355783373}
+[process] Actions to execute: [('p20', 0.7938081631176898), ('p40', 0.8148848816923944), ('p80', 0.8556795006114222), ('p160', 0.7634632148248177), ('p320', -0.19165244054570796), ('p640', 0.8682317519081907), ('p1200', 0.8446054353697117), ('p2500', 0.8446691286893268), ('p5000', 0.7408002439786507), ('p10000', 0.7042332754610536), ('p20000', 0.6885781769302308)]
+[process] Band 'p20' error=+0.794 -> tracks=[7]
+[process] Band 'p40' error=+0.815 -> tracks=[7]
+[process] Band 'p80' error=+0.856 -> tracks=[7, 6]
+[process] Band 'p160' error=+0.763 -> tracks=[6]
+[process] Band 'p320' error=-0.192 -> tracks=[11, 8, 158]
+[process] Band 'p640' error=+0.868 -> tracks=[3]
+[process] Band 'p1200' error=+0.845 -> tracks=[3]
+[process] Band 'p2500' error=+0.845 -> tracks=[3]
+[process] Band 'p5000' error=+0.741 -> tracks=[3]
+[process] Band 'p10000' error=+0.704 -> tracks=[3]
+[process] Band 'p20000' error=+0.689 -> tracks=[6]
+[DIAG] Active roles=['backing_vocals', 'bass', 'drums', 'other', 'piano', 'vocals'] vocal_only_content=False
+[DIAG] Track 3 role=vocals spec=+0.411dB level=+0.000dB fused=+0.205dB meter(lufs=--, rms=--)
+[process] Track 3: delta=+0.205dB target=-9.67dB step_up=0.90 step_down=1.20 applied=-9.67dB transport=WEB_API
+[DIAG] DRY-RUN: track 3 would be set to -9.67dB
+[DIAG] Track 6 role=drums spec=+0.704dB level=+0.000dB fused=+0.352dB meter(lufs=--, rms=--)
+[DIAG] Track 7 role=bass spec=+0.730dB level=+0.000dB fused=+0.365dB meter(lufs=--, rms=--)
+[process] Track 7: delta=+0.365dB target=-9.18dB step_up=0.90 step_down=1.20 applied=-9.18dB transport=WEB_API
+[DIAG] DRY-RUN: track 7 would be set to -9.18dB
+[DIAG] Track 8 role=piano spec=-0.042dB level=+0.000dB fused=-0.021dB meter(lufs=--, rms=--)
+[process] Track 8: delta=-0.021dB target=-25.97dB step_up=0.88 step_down=1.20 applied=-25.97dB transport=WEB_API
+[DIAG] DRY-RUN: track 8 would be set to -25.97dB
+[DIAG] Track 11 role=other spec=-0.069dB level=+0.000dB fused=-0.034dB meter(lufs=--, rms=--)
+[process] Track 11: delta=-0.034dB target=-17.58dB step_up=0.90 step_down=1.20 applied=-17.58dB transport=WEB_API
+[DIAG] DRY-RUN: track 11 would be set to -17.58dB
+[DIAG] Track 158 role=piano spec=-0.042dB level=+0.000dB fused=-0.021dB meter(lufs=--, rms=--)
+[process] Track 158: delta=-0.021dB target=-26.72dB step_up=0.88 step_down=1.20 applied=-26.72dB transport=WEB_API
+[DIAG] DRY-RUN: track 158 would be set to -26.72dB
+[_PROCESS_AUDIO] Retornou de process()
+[PROCESS] Janela pronta (40960 samples). Processando profile 'Worship-PA-Calibrated' em stereo
+[DIAG] INPUT FFT peak_hz=322.3 prominence=1028739.5 sr=48000 channels=2
+[_PROCESS_AUDIO] Chamando process() com audio shape (40960, 2), sr=48000, profile 'Worship-PA-Calibrated'
+[process] Starting audio analysis (shape=(40960, 2), duration=0.85s)
+[DIAG] DRY-RUN enabled: REAPER writes disabled for this cycle
+[DIAG] CUT-FIRST disabled: boosts allowed even when cuts are present
+[DIAG] VOCAL-FOCUS enabled: p640/p1200/p2500/p5000/p10000 mapped only to vocals/backing
+[DIAG] Active lineup scene: icon_roles
+[process] Integrated LUFS: -0.8
+[process] Band values: {'p20': 0.001519985314410571, 'p40': 0.0034058511777994103, 'p80': 0.009454259338260218, 'p160': 0.05211815293064037, 'p320': 1.0, 'p640': 0.09436136656869207, 'p1200': 0.03905569034119038, 'p2500': 0.01739997726211344, 'p5000': 0.007897050258456897, 'p10000': 0.003263558461413513, 'p20000': 0.0012808713442602167}
+[process] Band meter dB: {'p20': -51.63080856829473, 'p40': -44.58554048050951, 'p80': -35.69429737616817, 'p160': -20.863482643808066, 'p320': 10.39766079949748, 'p640': -15.707289737955037, 'p1200': -23.369516588414847, 'p2500': -30.392282257204187, 'p5000': -37.2538632566, 'p10000': -44.92936674470102, 'p20000': -53.05307565735091}
+[process] Master meters: LUFS=-0.83 RMS=-3.02dB
+[process] Reference profile: {'p20': 0.8050747184131027, 'p40': 0.8349056396433026, 'p80': 0.8906915206040797, 'p160': 0.8645311185961627, 'p320': 0.9319851433949337, 'p640': 0.9354471963489919, 'p1200': 0.8627801376826768, 'p2500': 0.8510114872843451, 'p5000': 0.7441770081169169, 'p10000': 0.705637433574922, 'p20000': 0.6891772398978809}
+[DIAG] alpha (gain-align) = 1.120
+[DIAG] Effective track map: {'drums': 6, 'bass': 7, 'piano': 8, 'other': None, 'vocals': 3, 'backing_vocals': [3], 'p20': [7], 'p40': [7], 'p80': [7, 6], 'p160': [6], 'p320': [11, 8, 158], 'p640': [3], 'p1200': [3], 'p2500': [3], 'p5000': [3], 'p10000': [3], 'p20000': [6], 'sub': [], 'low': [], 'mid': [], 'highmid': [], 'air': []}
+[DIAG] Top band errors: [('p80', 0.8801017616652178), ('p2500', 0.8315216935146972), ('p40', 0.8310907302290267), ('p640', 0.8297525999399287), ('p1200', 0.8190336810744585), ('p160', 0.8061533381559041)]
+[DIAG] Band values (0..1): {'p20': 0.001519985314410571, 'p40': 0.0034058511777994103, 'p80': 0.009454259338260218, 'p160': 0.05211815293064037, 'p320': 1.0, 'p640': 0.09436136656869207, 'p1200': 0.03905569034119038, 'p2500': 0.01739997726211344, 'p5000': 0.007897050258456897, 'p10000': 0.003263558461413513, 'p20000': 0.0012808713442602167}
+[DIAG] Band meter dB: {'p20': -51.63080856829473, 'p40': -44.58554048050951, 'p80': -35.69429737616817, 'p160': -20.863482643808066, 'p320': 10.39766079949748, 'p640': -15.707289737955037, 'p1200': -23.369516588414847, 'p2500': -30.392282257204187, 'p5000': -37.2538632566, 'p10000': -44.92936674470102, 'p20000': -53.05307565735091}
+[process] Actions to execute: [('p20', 0.8033721759405181), ('p40', 0.8310907302290267), ('p80', 0.8801017616652178), ('p160', 0.8061533381559041), ('p320', -0.18811941053944492), ('p640', 0.8297525999399287), ('p1200', 0.8190336810744585), ('p2500', 0.8315216935146972), ('p5000', 0.7353314861597706), ('p10000', 0.7019819068802616), ('p20000', 0.687742530072171)]
+[process] Band 'p20' error=+0.803 -> tracks=[7]
+[process] Band 'p40' error=+0.831 -> tracks=[7]
+[process] Band 'p80' error=+0.880 -> tracks=[7, 6]
+[process] Band 'p160' error=+0.806 -> tracks=[6]
+[process] Band 'p320' error=-0.188 -> tracks=[11, 8, 158]
+[process] Band 'p640' error=+0.830 -> tracks=[3]
+[process] Band 'p1200' error=+0.819 -> tracks=[3]
+[process] Band 'p2500' error=+0.832 -> tracks=[3]
+[process] Band 'p5000' error=+0.735 -> tracks=[3]
+[process] Band 'p10000' error=+0.702 -> tracks=[3]
+[process] Band 'p20000' error=+0.688 -> tracks=[6]
+[DIAG] Active roles=['backing_vocals', 'bass', 'drums', 'other', 'piano', 'vocals'] vocal_only_content=False
+[DIAG] Track 3 role=vocals spec=+0.407dB level=+0.000dB fused=+0.203dB meter(lufs=--, rms=--)
+[process] Track 3: delta=+0.203dB target=-9.46dB step_up=0.90 step_down=1.20 applied=-9.46dB transport=WEB_API
+[DIAG] DRY-RUN: track 3 would be set to -9.46dB
+[DIAG] Track 6 role=drums spec=+0.722dB level=+0.000dB fused=+0.361dB meter(lufs=--, rms=--)
+[DIAG] Track 7 role=bass spec=+0.740dB level=+0.000dB fused=+0.370dB meter(lufs=--, rms=--)
+[process] Track 7: delta=+0.370dB target=-8.81dB step_up=0.90 step_down=1.20 applied=-8.81dB transport=WEB_API
+[DIAG] DRY-RUN: track 7 would be set to -8.81dB
+[DIAG] Track 8 role=piano spec=-0.040dB level=+0.000dB fused=-0.020dB meter(lufs=--, rms=--)
+[process] Track 8: delta=-0.020dB target=-25.99dB step_up=0.88 step_down=1.20 applied=-25.99dB transport=WEB_API
+[DIAG] DRY-RUN: track 8 would be set to -25.99dB
+[DIAG] Track 11 role=other spec=-0.066dB level=+0.000dB fused=-0.033dB meter(lufs=--, rms=--)
+[process] Track 11: delta=-0.033dB target=-17.61dB step_up=0.90 step_down=1.20 applied=-17.61dB transport=WEB_API
+[DIAG] DRY-RUN: track 11 would be set to -17.61dB
+[DIAG] Track 158 role=piano spec=-0.040dB level=+0.000dB fused=-0.020dB meter(lufs=--, rms=--)
+[process] Track 158: delta=-0.020dB target=-26.74dB step_up=0.88 step_down=1.20 applied=-26.74dB transport=WEB_API
+[DIAG] DRY-RUN: track 158 would be set to -26.74dB
+[_PROCESS_AUDIO] Retornou de process()
+[PROCESS] Janela pronta (40960 samples). Processando profile 'Worship-PA-Calibrated' em stereo
+[DIAG] INPUT FFT peak_hz=322.3 prominence=232402.7 sr=48000 channels=2
+[_PROCESS_AUDIO] Chamando process() com audio shape (40960, 2), sr=48000, profile 'Worship-PA-Calibrated'
+[process] Starting audio analysis (shape=(40960, 2), duration=0.85s)
+[DIAG] DRY-RUN enabled: REAPER writes disabled for this cycle
+[DIAG] CUT-FIRST disabled: boosts allowed even when cuts are present
+[DIAG] VOCAL-FOCUS enabled: p640/p1200/p2500/p5000/p10000 mapped only to vocals/backing
+[DIAG] Active lineup scene: icon_roles
+[process] Integrated LUFS: -0.8
+[process] Band values: {'p20': 0.009201387269111225, 'p40': 0.01639909010121981, 'p80': 0.02887156054149444, 'p160': 0.0854513681464089, 'p320': 1.0, 'p640': 0.06764756507799301, 'p1200': 0.022030031679734823, 'p2500': 0.00916367779991411, 'p5000': 0.0038691899594719623, 'p10000': 0.001670685657118801, 'p20000': 0.0007118689627407166}
+[process] Band meter dB: {'p20': -35.96712875827514, 'p40': -30.947733437994412, 'p80': -26.03461793957333, 'p160': -16.609359901719387, 'p320': 10.39777881626893, 'p640': -18.639164699187305, 'p1200': -28.386644970925598, 'p2500': -36.00713532210564, 'p5000': -43.496970792116024, 'p10000': -50.7911488502821, 'p20000': -58.199336226719915}
+[process] Master meters: LUFS=-0.82 RMS=-3.01dB
+[process] Reference profile: {'p20': 0.8050747184131027, 'p40': 0.8349056396433026, 'p80': 0.8906915206040797, 'p160': 0.8645311185961627, 'p320': 0.9319851433949337, 'p640': 0.9354471963489919, 'p1200': 0.8627801376826768, 'p2500': 0.8510114872843451, 'p5000': 0.7441770081169169, 'p10000': 0.705637433574922, 'p20000': 0.6891772398978809}
+[DIAG] alpha (gain-align) = 1.132
+[DIAG] Effective track map: {'drums': 6, 'bass': 7, 'piano': 8, 'other': None, 'vocals': 3, 'backing_vocals': [3], 'p20': [7], 'p40': [7], 'p80': [7, 6], 'p160': [6], 'p320': [11, 8, 158], 'p640': [3], 'p1200': [3], 'p2500': [3], 'p5000': [3], 'p10000': [3], 'p20000': [6], 'sub': [], 'low': [], 'mid': [], 'highmid': [], 'air': []}
+[DIAG] Top band errors: [('p640', 0.8588797836163138), ('p80', 0.858013024494598), ('p2500', 0.8406395086411174), ('p1200', 0.8378452782211206), ('p40', 0.8163442043754875), ('p20', 0.7946600580194141)]
+[DIAG] Band values (0..1): {'p20': 0.009201387269111225, 'p40': 0.01639909010121981, 'p80': 0.02887156054149444, 'p160': 0.0854513681464089, 'p320': 1.0, 'p640': 0.06764756507799301, 'p1200': 0.022030031679734823, 'p2500': 0.00916367779991411, 'p5000': 0.0038691899594719623, 'p10000': 0.001670685657118801, 'p20000': 0.0007118689627407166}
+[DIAG] Band meter dB: {'p20': -35.96712875827514, 'p40': -30.947733437994412, 'p80': -26.03461793957333, 'p160': -16.609359901719387, 'p320': 10.39777881626893, 'p640': -18.639164699187305, 'p1200': -28.386644970925598, 'p2500': -36.00713532210564, 'p5000': -43.496970792116024, 'p10000': -50.7911488502821, 'p20000': -58.199336226719915}
+[process] Actions to execute: [('p20', 0.7946600580194141), ('p40', 0.8163442043754875), ('p80', 0.858013024494598), ('p160', 0.7678123355047873), ('p320', -0.1998724873180281), ('p640', 0.8588797836163138), ('p1200', 0.8378452782211206), ('p2500', 0.8406395086411174), ('p5000', 0.7397976359366106), ('p10000', 0.7037464552653894), ('p20000', 0.6883715055803351)]
+[process] Band 'p20' error=+0.795 -> tracks=[7]
+[process] Band 'p40' error=+0.816 -> tracks=[7]
+[process] Band 'p80' error=+0.858 -> tracks=[7, 6]
+[process] Band 'p160' error=+0.768 -> tracks=[6]
+[process] Band 'p320' error=-0.200 -> tracks=[11, 8, 158]
+[process] Band 'p640' error=+0.859 -> tracks=[3]
+[process] Band 'p1200' error=+0.838 -> tracks=[3]
+[process] Band 'p2500' error=+0.841 -> tracks=[3]
+[process] Band 'p5000' error=+0.740 -> tracks=[3]
+[process] Band 'p10000' error=+0.704 -> tracks=[3]
+[process] Band 'p20000' error=+0.688 -> tracks=[6]
+[DIAG] Active roles=['backing_vocals', 'bass', 'drums', 'other', 'piano', 'vocals'] vocal_only_content=False
+[DIAG] Track 3 role=vocals spec=+0.409dB level=+0.000dB fused=+0.204dB meter(lufs=--, rms=--)
+[process] Track 3: delta=+0.204dB target=-9.26dB step_up=0.90 step_down=1.20 applied=-9.26dB transport=WEB_API
+[DIAG] DRY-RUN: track 3 would be set to -9.26dB
+[DIAG] Track 6 role=drums spec=+0.708dB level=+0.000dB fused=+0.354dB meter(lufs=--, rms=--)
+[DIAG] Track 7 role=bass spec=+0.732dB level=+0.000dB fused=+0.366dB meter(lufs=--, rms=--)
+[process] Track 7: delta=+0.366dB target=-8.44dB step_up=0.90 step_down=1.20 applied=-8.44dB transport=WEB_API
+[DIAG] DRY-RUN: track 7 would be set to -8.44dB
+[DIAG] Track 8 role=piano spec=-0.042dB level=+0.000dB fused=-0.021dB meter(lufs=--, rms=--)
+[process] Track 8: delta=-0.021dB target=-26.01dB step_up=0.88 step_down=1.20 applied=-26.01dB transport=WEB_API
+[DIAG] DRY-RUN: track 8 would be set to -26.01dB
+[DIAG] Track 11 role=other spec=-0.069dB level=+0.000dB fused=-0.035dB meter(lufs=--, rms=--)
+[process] Track 11: delta=-0.035dB target=-17.65dB step_up=0.90 step_down=1.20 applied=-17.65dB transport=WEB_API
+[DIAG] DRY-RUN: track 11 would be set to -17.65dB
+[DIAG] Track 158 role=piano spec=-0.042dB level=+0.000dB fused=-0.021dB meter(lufs=--, rms=--)
+[process] Track 158: delta=-0.021dB target=-26.76dB step_up=0.88 step_down=1.20 applied=-26.76dB transport=WEB_API
+[DIAG] DRY-RUN: track 158 would be set to -26.76dB
+[_PROCESS_AUDIO] Retornou de process()
+[PROCESS] Janela pronta (40960 samples). Processando profile 'Worship-PA-Calibrated' em stereo
+[DIAG] INPUT FFT peak_hz=322.3 prominence=1105027.1 sr=48000 channels=2
+[_PROCESS_AUDIO] Chamando process() com audio shape (40960, 2), sr=48000, profile 'Worship-PA-Calibrated'
+[process] Starting audio analysis (shape=(40960, 2), duration=0.85s)
+[DIAG] DRY-RUN enabled: REAPER writes disabled for this cycle
+[DIAG] CUT-FIRST disabled: boosts allowed even when cuts are present
+[DIAG] VOCAL-FOCUS enabled: p640/p1200/p2500/p5000/p10000 mapped only to vocals/backing
+[DIAG] Active lineup scene: icon_roles
+[process] Integrated LUFS: -0.8
+[process] Band values: {'p20': 0.008305916322686409, 'p40': 0.014852239427431392, 'p80': 0.026330072243535077, 'p160': 0.08055390145787297, 'p320': 1.0, 'p640': 0.07380216012194288, 'p1200': 0.026280358631813234, 'p2500': 0.011001437818464518, 'p5000': 0.0053513772943143915, 'p10000': 0.0022022957314755624, 'p20000': 0.000875766466448936}
+[process] Band meter dB: {'p20': -36.87944200232346, 'p40': -31.83126286036539, 'p80': -26.857899550568945, 'p160': -17.144531046071805, 'p320': 10.397729384415232, 'p640': -17.9049245537911, 'p1200': -26.875101247746404, 'p2500': -34.439653413832545, 'p5000': -40.69878879226491, 'p10000': -48.41046742889131, 'p20000': -56.41990380758209}
+[process] Master meters: LUFS=-0.83 RMS=-3.01dB
+[process] Reference profile: {'p20': 0.8050747184131027, 'p40': 0.8349056396433026, 'p80': 0.8906915206040797, 'p160': 0.8645311185961627, 'p320': 0.9319851433949337, 'p640': 0.9354471963489919, 'p1200': 0.8627801376826768, 'p2500': 0.8510114872843451, 'p5000': 0.7441770081169169, 'p10000': 0.705637433574922, 'p20000': 0.6891772398978809}
+[DIAG] alpha (gain-align) = 1.136
+[DIAG] Effective track map: {'drums': 6, 'bass': 7, 'piano': 8, 'other': None, 'vocals': 3, 'backing_vocals': [3], 'p20': [7], 'p40': [7], 'p80': [7, 6], 'p160': [6], 'p320': [11, 8, 158], 'p640': [3], 'p1200': [3], 'p2500': [3], 'p5000': [3], 'p10000': [3], 'p20000': [6], 'sub': [], 'low': [], 'mid': [], 'highmid': [], 'air': []}
+[DIAG] Top band errors: [('p80', 0.8607872174689173), ('p640', 0.8516266071799563), ('p2500', 0.8385166362105209), ('p1200', 0.832932296637748), ('p40', 0.8180372518179341), ('p20', 0.7956412980551356)]
+[DIAG] Band values (0..1): {'p20': 0.008305916322686409, 'p40': 0.014852239427431392, 'p80': 0.026330072243535077, 'p160': 0.08055390145787297, 'p320': 1.0, 'p640': 0.07380216012194288, 'p1200': 0.026280358631813234, 'p2500': 0.011001437818464518, 'p5000': 0.0053513772943143915, 'p10000': 0.0022022957314755624, 'p20000': 0.000875766466448936}
+[DIAG] Band meter dB: {'p20': -36.87944200232346, 'p40': -31.83126286036539, 'p80': -26.857899550568945, 'p160': -17.144531046071805, 'p320': 10.397729384415232, 'p640': -17.9049245537911, 'p1200': -26.875101247746404, 'p2500': -34.439653413832545, 'p5000': -40.69878879226491, 'p10000': -48.41046742889131, 'p20000': -56.41990380758209}
+[process] Actions to execute: [('p20', 0.7956412980551356), ('p40', 0.8180372518179341), ('p80', 0.8607872174689173), ('p160', 0.7730422587998244), ('p320', -0.20376195439379396), ('p640', 0.8516266071799563), ('p1200', 0.832932296637748), ('p2500', 0.8385166362105209), ('p5000', 0.7380991968857268), ('p10000', 0.7031361825894261), ('p20000', 0.6881825906752709)]
+[process] Band 'p20' error=+0.796 -> tracks=[7]
+[process] Band 'p40' error=+0.818 -> tracks=[7]
+[process] Band 'p80' error=+0.861 -> tracks=[7, 6]
+[process] Band 'p160' error=+0.773 -> tracks=[6]
+[process] Band 'p320' error=-0.204 -> tracks=[11, 8, 158]
+[process] Band 'p640' error=+0.852 -> tracks=[3]
+[process] Band 'p1200' error=+0.833 -> tracks=[3]
+[process] Band 'p2500' error=+0.839 -> tracks=[3]
+[process] Band 'p5000' error=+0.738 -> tracks=[3]
+[process] Band 'p10000' error=+0.703 -> tracks=[3]
+[process] Band 'p20000' error=+0.688 -> tracks=[6]
+[DIAG] Active roles=['backing_vocals', 'bass', 'drums', 'other', 'piano', 'vocals'] vocal_only_content=False
+[DIAG] Track 3 role=vocals spec=+0.409dB level=+0.000dB fused=+0.204dB meter(lufs=--, rms=--)
+[process] Track 3: delta=+0.204dB target=-9.05dB step_up=0.90 step_down=1.20 applied=-9.05dB transport=WEB_API
+[DIAG] DRY-RUN: track 3 would be set to -9.05dB
+[DIAG] Track 6 role=drums spec=+0.707dB level=+0.000dB fused=+0.354dB meter(lufs=--, rms=--)
+[DIAG] Track 7 role=bass spec=+0.731dB level=+0.000dB fused=+0.366dB meter(lufs=--, rms=--)
+[process] Track 7: delta=+0.366dB target=-8.08dB step_up=0.90 step_down=1.20 applied=-8.08dB transport=WEB_API
+[DIAG] DRY-RUN: track 7 would be set to -8.08dB
+[DIAG] Track 8 role=piano spec=-0.045dB level=+0.000dB fused=-0.023dB meter(lufs=--, rms=--)
+[process] Track 8: delta=-0.023dB target=-26.03dB step_up=0.89 step_down=1.20 applied=-26.03dB transport=WEB_API
+[DIAG] DRY-RUN: track 8 would be set to -26.03dB
+[DIAG] Track 11 role=other spec=-0.073dB level=+0.000dB fused=-0.036dB meter(lufs=--, rms=--)
+[process] Track 11: delta=-0.036dB target=-17.68dB step_up=0.90 step_down=1.20 applied=-17.68dB transport=WEB_API
+[DIAG] DRY-RUN: track 11 would be set to -17.68dB
+[DIAG] Track 158 role=piano spec=-0.045dB level=+0.000dB fused=-0.023dB meter(lufs=--, rms=--)
+[process] Track 158: delta=-0.023dB target=-26.78dB step_up=0.89 step_down=1.20 applied=-26.78dB transport=WEB_API
+[DIAG] DRY-RUN: track 158 would be set to -26.78dB
+[_PROCESS_AUDIO] Retornou de process()
+[PROCESS] Janela pronta (40960 samples). Processando profile 'Worship-PA-Calibrated' em stereo
+[DIAG] INPUT FFT peak_hz=322.3 prominence=1074852.7 sr=48000 channels=2
+[_PROCESS_AUDIO] Chamando process() com audio shape (40960, 2), sr=48000, profile 'Worship-PA-Calibrated'
+[process] Starting audio analysis (shape=(40960, 2), duration=0.85s)
+[DIAG] DRY-RUN enabled: REAPER writes disabled for this cycle
+[DIAG] CUT-FIRST disabled: boosts allowed even when cuts are present
+[DIAG] VOCAL-FOCUS enabled: p640/p1200/p2500/p5000/p10000 mapped only to vocals/backing
+[DIAG] Active lineup scene: icon_roles
+[process] Integrated LUFS: -0.8
+[process] Band values: {'p20': 0.002937334284321462, 'p40': 0.0056039231860187475, 'p80': 0.01216762937054413, 'p160': 0.055477763068984526, 'p320': 1.0, 'p640': 0.09234574856863403, 'p1200': 0.03798387840594075, 'p2500': 0.016907543995574793, 'p5000': 0.007557361049181914, 'p10000': 0.0031403202613788954, 'p20000': 0.0012371235311681393}
+[process] Band meter dB: {'p20': -45.87233197476942, 'p40': -40.25737142604453, 'p80': -33.51409288997251, 'p160': -20.330576319691314, 'p320': 10.397736715528646, 'p640': -15.903976365133117, 'p1200': -23.620368744635382, 'p2500': -30.650772886360684, 'p5000': -37.645048551340665, 'p10000': -45.27294587973785, 'p20000': -53.364102117640584}
+[process] Master meters: LUFS=-0.83 RMS=-3.01dB
+[process] Reference profile: {'p20': 0.8050747184131027, 'p40': 0.8349056396433026, 'p80': 0.8906915206040797, 'p160': 0.8645311185961627, 'p320': 0.9319851433949337, 'p640': 0.9354471963489919, 'p1200': 0.8627801376826768, 'p2500': 0.8510114872843451, 'p5000': 0.7441770081169169, 'p10000': 0.705637433574922, 'p20000': 0.6891772398978809}
+[DIAG] alpha (gain-align) = 1.125
+[DIAG] Effective track map: {'drums': 6, 'bass': 7, 'piano': 8, 'other': None, 'vocals': 3, 'backing_vocals': [3], 'p20': [7], 'p40': [7], 'p80': [7, 6], 'p160': [6], 'p320': [11, 8, 158], 'p640': [3], 'p1200': [3], 'p2500': [3], 'p5000': [3], 'p10000': [3], 'p20000': [6], 'sub': [], 'low': [], 'mid': [], 'highmid': [], 'air': []}
+[DIAG] Top band errors: [('p80', 0.8770056230870142), ('p2500', 0.8319942319635278), ('p640', 0.831578610894987), ('p40', 0.8286024629042884), ('p1200', 0.820056657920642), ('p160', 0.8021308796740094)]
+[DIAG] Band values (0..1): {'p20': 0.002937334284321462, 'p40': 0.0056039231860187475, 'p80': 0.01216762937054413, 'p160': 0.055477763068984526, 'p320': 1.0, 'p640': 0.09234574856863403, 'p1200': 0.03798387840594075, 'p2500': 0.016907543995574793, 'p5000': 0.007557361049181914, 'p10000': 0.0031403202613788954, 'p20000': 0.0012371235311681393}
+[DIAG] Band meter dB: {'p20': -45.87233197476942, 'p40': -40.25737142604453, 'p80': -33.51409288997251, 'p160': -20.330576319691314, 'p320': 10.397736715528646, 'p640': -15.903976365133117, 'p1200': -23.620368744635382, 'p2500': -30.650772886360684, 'p5000': -37.645048551340665, 'p10000': -45.27294587973785, 'p20000': -53.364102117640584}
+[process] Actions to execute: [('p20', 0.8017708656440576), ('p40', 0.8286024629042884), ('p80', 0.8770056230870142), ('p160', 0.8021308796740094), ('p320', -0.19279414600361144), ('p640', 0.831578610894987), ('p1200', 0.820056657920642), ('p2500', 0.8319942319635278), ('p5000', 0.7356766449262898), ('p10000', 0.7021052663828444), ('p20000', 0.6877857489715954)]
+[process] Band 'p20' error=+0.802 -> tracks=[7]
+[process] Band 'p40' error=+0.829 -> tracks=[7]
+[process] Band 'p80' error=+0.877 -> tracks=[7, 6]
+[process] Band 'p160' error=+0.802 -> tracks=[6]
+[process] Band 'p320' error=-0.193 -> tracks=[11, 8, 158]
+[process] Band 'p640' error=+0.832 -> tracks=[3]
+[process] Band 'p1200' error=+0.820 -> tracks=[3]
+[process] Band 'p2500' error=+0.832 -> tracks=[3]
+[process] Band 'p5000' error=+0.736 -> tracks=[3]
+[process] Band 'p10000' error=+0.702 -> tracks=[3]
+[process] Band 'p20000' error=+0.688 -> tracks=[6]
+[DIAG] Active roles=['backing_vocals', 'bass', 'drums', 'other', 'piano', 'vocals'] vocal_only_content=False
+[DIAG] Track 3 role=vocals spec=+0.406dB level=+0.000dB fused=+0.203dB meter(lufs=--, rms=--)
+[process] Track 3: delta=+0.203dB target=-8.85dB step_up=0.90 step_down=1.20 applied=-8.85dB transport=WEB_API
+[DIAG] DRY-RUN: track 3 would be set to -8.85dB
+[DIAG] Track 6 role=drums spec=+0.720dB level=+0.000dB fused=+0.360dB meter(lufs=--, rms=--)
+[DIAG] Track 7 role=bass spec=+0.739dB level=+0.000dB fused=+0.369dB meter(lufs=--, rms=--)
+[process] Track 7: delta=+0.369dB target=-7.71dB step_up=0.90 step_down=1.20 applied=-7.71dB transport=WEB_API
+[DIAG] DRY-RUN: track 7 would be set to -7.71dB
+[DIAG] Track 8 role=piano spec=-0.043dB level=+0.000dB fused=-0.022dB meter(lufs=--, rms=--)
+[process] Track 8: delta=-0.022dB target=-26.05dB step_up=0.88 step_down=1.20 applied=-26.05dB transport=WEB_API
+[DIAG] DRY-RUN: track 8 would be set to -26.05dB
+[DIAG] Track 11 role=other spec=-0.070dB level=+0.000dB fused=-0.035dB meter(lufs=--, rms=--)
+[process] Track 11: delta=-0.035dB target=-17.72dB step_up=0.90 step_down=1.20 applied=-17.72dB transport=WEB_API
+[DIAG] DRY-RUN: track 11 would be set to -17.72dB
+[DIAG] Track 158 role=piano spec=-0.043dB level=+0.000dB fused=-0.022dB meter(lufs=--, rms=--)
+[process] Track 158: delta=-0.022dB target=-26.80dB step_up=0.88 step_down=1.20 applied=-26.80dB transport=WEB_API
+[DIAG] DRY-RUN: track 158 would be set to -26.80dB
+[_PROCESS_AUDIO] Retornou de process()
+Simulated live audio finished.
+
+[DRY-RUN LOG] ended=2026-03-18T10:04:05.930388
