@@ -54,7 +54,7 @@ def _gammatone_like_energy(fft_magnitude, fft_freqs, center_hz):
     return float(np.sum(weighted) / denom)
 
 
-def analyze(audio, sample_rate=44100, centers_hz=None):
+def analyze(audio, sample_rate=48000, centers_hz=None):
     """Analyze audio with a perceptual gammatone-style filterbank.
 
     Returns:

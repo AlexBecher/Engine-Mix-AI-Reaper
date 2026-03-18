@@ -28,13 +28,28 @@ TRACK_DIAG_RE = re.compile(
     r"level=([+-]?\d+(?:\.\d+)?)dB\s+fused=([+-]?\d+(?:\.\d+)?)dB\s+"
     r"meter\(lufs=(--|[+-]?\d+(?:\.\d+)?),\s+rms=(--|[+-]?\d+(?:\.\d+)?)\)"
 )
+FFT_TONAL_SNAP_RE = re.compile(
+    r"\[DIAG\]\s+FFT tonal snap applied:\s+band=([a-zA-Z0-9_]+)\s+"
+    r"peak_hz=([+-]?\d+(?:\.\d+)?)\s+prominence=([+-]?\d+(?:\.\d+)?)\s+"
+    r"octave_corrected=(True|False)"
+)
+INPUT_FFT_PEAK_RE = re.compile(
+    r"\[DIAG\]\s+INPUT FFT\s+peak_hz=([+-]?\d+(?:\.\d+)?)\s+"
+    r"prominence=([+-]?\d+(?:\.\d+)?)\s+sr=(\d+)\s+channels=(\d+)"
+)
+REASTREAM_PAIRS_RE = re.compile(
+    r"\[DIAG\]\s+REASTREAM pairs\s+sr=(\d+)\s+total_ch=(\d+)\s+selected=(\d+/\d+)\s+::\s+(.+)"
+)
+SR_CAL_RE = re.compile(
+    r"\[SR-CAL\]\s+(.*)"
+)
 TRACK_DEADBAND_RE = re.compile(r"\[process\]\s+Track\s+(\d+):\s+fused delta inside deadband")
 MAX_TRACK_ROWS = 9
-METER_DB_FLOOR = -24.0
-METER_DB_CEIL = 6.0
+METER_DB_FLOOR = -96.0
+METER_DB_CEIL = 12.0
 BAR_ATTACK = 0.35
 BAR_RELEASE = 0.12
-MIN_LAYOUT_WIDTH = 1280
+MIN_LAYOUT_WIDTH = 1290
 LINEUP_ICON_SIZE = 45
 LINEUP_ICON_COLUMNS = 2
 TOGGLE_ICON_SIZE = 16
@@ -140,6 +155,10 @@ class ConfigGUI:
         self.webapi_status_label = None
         self.reastream_status_label = None
         self.master_meter_label = None
+        self.tonal_snap_label = None
+        self.input_fft_label = None
+        self.reastream_pairs_label = None
+        self.sr_cal_label = None
         self.profile_status_label = None
         self.scene_status_label = None
         self.mix_stability_label = None
@@ -450,6 +469,14 @@ class ConfigGUI:
         self.band_errors = {band: 0.0 for band in BAND_ORDER}
         self._update_mix_stability_label()
         self._refresh_bars()
+        if self.tonal_snap_label is not None:
+            self.tonal_snap_label.config(text="Tonal snap: --", foreground="#6b7280")
+        if self.input_fft_label is not None:
+            self.input_fft_label.config(text="Input FFT: --", foreground="#6b7280")
+        if self.reastream_pairs_label is not None:
+            self.reastream_pairs_label.config(text="ReaStream pairs: --", foreground="#6b7280")
+        if self.sr_cal_label is not None:
+            self.sr_cal_label.config(text="SR Cal: --", foreground="#6b7280")
         if self.mixer_canvas is not None:
             self._refresh_mixer_metadata()
 
@@ -537,6 +564,7 @@ class ConfigGUI:
         run.setdefault("webapi_timeout", 2.5)
         run.setdefault("channels", 2)
         run.setdefault("analysis_interval", 5.0)
+        run.setdefault("calibrate_freq", 0.0)
         run.setdefault("verbose", True)
         run.pop("osc_host", None)
         run.pop("osc_port", None)
@@ -548,7 +576,7 @@ class ConfigGUI:
         dry_run.setdefault("loop_count", 1)
         dry_run.setdefault("device_id", None)
         dry_run.setdefault("device_name", "")
-        dry_run.setdefault("sample_rate", 44100)
+        dry_run.setdefault("sample_rate", 48000)
         dry_run.setdefault("blocksize", 4096)
         dry_run.setdefault("channels", 2)
 
@@ -789,10 +817,20 @@ class ConfigGUI:
         if self.start_stop_btn is None:
             return
         if running and "stop" in self.action_button_images:
-            self.start_stop_btn.config(image=self.action_button_images["stop"], text="")
+            self.start_stop_btn.config(
+                image=self.action_button_images["stop"],
+                #text="STOP",
+                compound="top",
+                fg="#22c55e",
+            )
             return
         if (not running) and "start" in self.action_button_images:
-            self.start_stop_btn.config(image=self.action_button_images["start"], text="")
+            self.start_stop_btn.config(
+                image=self.action_button_images["start"],
+                #text="RUN PROFILE",
+                compound="top",
+                fg="#22c55e",
+            )
             return
         self.start_stop_btn.config(text="STOP" if running else "START")
 
@@ -1015,6 +1053,7 @@ class ConfigGUI:
         self.run_vars["webapi_timeout"] = tk.DoubleVar(value=float(run.get("webapi_timeout", 2.5)))
         self.run_vars["channels"] = tk.IntVar(value=int(run.get("channels", 2)))
         self.run_vars["analysis_interval"] = tk.DoubleVar(value=float(run.get("analysis_interval", 5.0)))
+        self.run_vars["calibrate_freq"] = tk.DoubleVar(value=float(run.get("calibrate_freq", 0.0)))
         self.run_vars["verbose"] = tk.BooleanVar(value=bool(run.get("verbose", True)))
         self.run_vars["reastream"] = tk.BooleanVar(value=bool(run.get("reastream", True)))
         lineup_cfg = self.config.get("lineup", {}) if isinstance(self.config.get("lineup", {}), dict) else {}
@@ -1063,6 +1102,14 @@ class ConfigGUI:
         reastream_toggle.grid(row=5, column=0, columnspan=2, sticky="w", pady=(8, 0))
         verbose_toggle = self._create_image_toggle(run_box, self.run_vars["verbose"], "Verbose (required for telemetry)")
         verbose_toggle.grid(row=5, column=2, columnspan=2, sticky="w", pady=(8, 0))
+        ttk.Label(run_box, text="Cal SR ref Hz (0=off)").grid(row=6, column=0, sticky="w", pady=(6, 0))
+        ttk.Entry(run_box, textvariable=self.run_vars["calibrate_freq"], width=14).grid(row=6, column=1, sticky="w", padx=8, pady=(6, 0))
+        ttk.Button(run_box, text="Como usar?", command=self._show_sr_cal_help).grid(
+            row=6,
+            column=2,
+            sticky="w",
+            pady=(6, 0),
+        )
 
     def _load_profile_names(self):
         profiles_path = _app_dir() / "learning" / "profiles.json"
@@ -1096,6 +1143,25 @@ class ConfigGUI:
         if not current and values:
             self.run_vars["profile"].set(values[0])
         self._update_runtime_profile_label()
+
+    def _show_sr_cal_help(self):
+        lines = [
+            "Passo a passo SR Cal:",
+            "",
+            "1) No Reaper, toque tom de teste em 640 Hz.",
+            "2) No campo 'Cal SR ref Hz', coloque 320.",
+            "3) Clique RUN PROFILE e aguarde o status SR Cal estabilizar.",
+            "4) Confirmacao esperada: factor=0.5000 e snap=0.5x.",
+            "5) Pare o tom de teste e volte para o audio real.",
+            "6) Rode 20-40s e confirme estabilidade da leitura.",
+            "7) Se ficou estavel, clique SAVE.",
+            "",
+            "Regras rapidas:",
+            "- 0 no campo desativa calibracao.",
+            "- Se 640 Hz no Reaper e 640 no campo, tende a factor~1.0.",
+            "- Se SR Cal oscilar, repita com volume mais limpo do tom.",
+        ]
+        messagebox.showinfo("Como usar SR Cal", "\n".join(lines))
 
     def _delete_selected_profile(self):
         selected = str(self.run_vars.get("profile", tk.StringVar(value="")).get()).strip()
@@ -1310,9 +1376,11 @@ class ConfigGUI:
         self._lineup_role_syncing = False
 
         self._load_action_button_images()
+        action_row = ttk.Frame(control_box)
+        action_row.grid(row=0, column=0, columnspan=6, sticky="w")
 
         self.start_stop_btn = tk.Button(
-            control_box,
+            action_row,
             command=self._toggle_start_stop,
             bg="#1f2937",
             fg="#9ca3af",
@@ -1323,12 +1391,13 @@ class ConfigGUI:
             padx=0,
             pady=0,
             height=60,
+           
         )
         self._set_start_stop_button_visual(False)
-        self.start_stop_btn.grid(row=0, column=0, padx=(0, 6), sticky="w")
+        self.start_stop_btn.grid(row=0, column=0, padx=(0, 0), sticky="w")
 
         save_btn = tk.Button(
-            control_box,
+            action_row,
             command=self._save_config,
             bg="#1f2937",
             fg="#9ca3af",
@@ -1344,10 +1413,10 @@ class ConfigGUI:
             save_btn.config(image=self.action_button_images["save"], text="")
         else:
             save_btn.config(text="SAVE CONFIG")
-        save_btn.grid(row=0, column=1, padx=(0, 6), sticky="w")
+        save_btn.grid(row=0, column=1, padx=(0, 0), sticky="w")
 
         learn_btn = tk.Button(
-            control_box,
+            action_row,
             command=self._learn_and_save_suggested,
             bg="#1f2937",
             fg="#9ca3af",
@@ -1363,7 +1432,7 @@ class ConfigGUI:
             learn_btn.config(image=self.action_button_images["learn"], text="")
         else:
             learn_btn.config(text="LEARN (10 s) + SAVE como")
-        learn_btn.grid(row=0, column=2, padx=(0, 6), sticky="w")
+        learn_btn.grid(row=0, column=2, padx=(0, 0), sticky="w")
 
         self.runtime_label = ttk.Label(control_box, text="Stopped", foreground="#ff6b6b")
         self.runtime_label.grid(row=1, column=0, columnspan=2, sticky="w", pady=(8, 0))
@@ -1388,12 +1457,24 @@ class ConfigGUI:
 
         self.mix_stability_label = ttk.Label(control_box, text="Mix stability: --", foreground="#6b7280")
         self.mix_stability_label.grid(row=8, column=0, columnspan=2, sticky="w", pady=(2, 0))
+
+        self.tonal_snap_label = ttk.Label(control_box, text="Tonal snap: --", foreground="#6b7280")
+        self.tonal_snap_label.grid(row=9, column=0, columnspan=2, sticky="w", pady=(2, 0))
+
+        self.input_fft_label = ttk.Label(control_box, text="Input FFT: --", foreground="#6b7280")
+        self.input_fft_label.grid(row=10, column=0, columnspan=2, sticky="w", pady=(2, 0))
+
+        self.reastream_pairs_label = ttk.Label(control_box, text="ReaStream pairs: --", foreground="#6b7280")
+        self.reastream_pairs_label.grid(row=11, column=0, columnspan=2, sticky="w", pady=(2, 0))
+
+        self.sr_cal_label = ttk.Label(control_box, text="SR Cal: --", foreground="#6b7280")
+        self.sr_cal_label.grid(row=12, column=0, columnspan=2, sticky="w", pady=(2, 0))
         self._update_runtime_profile_label()
         self._update_runtime_scene_label()
 
         self.learn_preview_actions_frame = None
         self.learn_apply_btn = tk.Button(
-            control_box,
+            action_row,
             command=self._apply_learned_profile,
             state="disabled",
             bg="#1f2937",
@@ -1410,9 +1491,9 @@ class ConfigGUI:
             self.learn_apply_btn.config(image=self.action_button_images["apply"], text="")
         else:
             self.learn_apply_btn.config(text="APLICAR COMO PERFIL")
-        self.learn_apply_btn.grid(row=0, column=4, padx=(0, 6), sticky="w")
+        self.learn_apply_btn.grid(row=0, column=4, padx=(0, 0), sticky="w")
         self.learn_merge_btn = tk.Button(
-            control_box,
+            action_row,
             command=self._merge_learned_profile_70_30,
             state="disabled",
             bg="#1f2937",
@@ -1432,7 +1513,7 @@ class ConfigGUI:
         self.learn_merge_btn.grid(row=0, column=5, sticky="w", padx=(0, 0))
 
         self.dry_run_btn = tk.Button(
-            control_box,
+            action_row,
             command=self._toggle_dry_run,
             bg="#1f2937",
             fg="#9ca3af",
@@ -1448,7 +1529,7 @@ class ConfigGUI:
             self.dry_run_btn.config(image=self.action_button_images["dry"], text="")
         else:
             self.dry_run_btn.config(text="DRY-RUN: OFF")
-        self.dry_run_btn.grid(row=0, column=3, padx=(0, 6), sticky="w")
+        self.dry_run_btn.grid(row=0, column=3, padx=(0, 0), sticky="w")
 
         self.dry_run_frame = ttk.LabelFrame(control_box, text="DRY-RUN Source", padding=8)
         self.dry_run_frame.grid(row=8, column=0, columnspan=3, sticky="ew", pady=(8, 0))
@@ -2131,6 +2212,7 @@ class ConfigGUI:
             "webapi_timeout": float(self.run_vars["webapi_timeout"].get()),
             "channels": int(self.run_vars["channels"].get()),
             "analysis_interval": float(self.run_vars["analysis_interval"].get()),
+            "calibrate_freq": float(self.run_vars["calibrate_freq"].get()),
             "verbose": bool(self.run_vars["verbose"].get()),
         }
 
@@ -2255,6 +2337,9 @@ class ConfigGUI:
             )
         if force_verbose:
             cmd.append("--verbose")
+        cal_freq = float(run.get("calibrate_freq", 0.0) or 0.0)
+        if cal_freq > 0.0:
+            cmd.extend(["--calibrate-freq", str(cal_freq)])
         return cmd
 
     def _toggle_start_stop(self):
@@ -2617,6 +2702,84 @@ class ConfigGUI:
                 state.update({"fused_db": 0.0, "intent": "hold"})
                 self.track_diag_state[track_id] = state
                 self._refresh_mixer_metadata(track_id)
+                continue
+
+            tonal_snap_match = FFT_TONAL_SNAP_RE.search(line)
+            if tonal_snap_match and self.tonal_snap_label is not None:
+                band = str(tonal_snap_match.group(1)).strip().upper()
+                peak_hz = float(tonal_snap_match.group(2))
+                prominence = float(tonal_snap_match.group(3))
+                octave_corrected = tonal_snap_match.group(4) == "True"
+                octave_flag = " (octave fix)" if octave_corrected else ""
+                self.tonal_snap_label.config(
+                    text=f"Tonal snap: {band} @ {peak_hz:.1f} Hz | prom={prominence:.1f}{octave_flag}",
+                    foreground="#7de8ff",
+                )
+                continue
+
+            input_fft_match = INPUT_FFT_PEAK_RE.search(line)
+            if input_fft_match and self.input_fft_label is not None:
+                peak_hz = float(input_fft_match.group(1))
+                prominence = float(input_fft_match.group(2))
+                sample_rate = int(input_fft_match.group(3))
+                channel_count = int(input_fft_match.group(4))
+                self.input_fft_label.config(
+                    text=(
+                        f"Input FFT: {peak_hz:.1f} Hz | prom={prominence:.1f} "
+                        f"| sr={sample_rate} | ch={channel_count}"
+                    ),
+                    foreground="#fbbf24",
+                )
+                continue
+
+            reastream_pairs_match = REASTREAM_PAIRS_RE.search(line)
+            if reastream_pairs_match and self.reastream_pairs_label is not None:
+                sample_rate = int(reastream_pairs_match.group(1))
+                total_ch = int(reastream_pairs_match.group(2))
+                selected_pair = reastream_pairs_match.group(3)
+                pair_text = reastream_pairs_match.group(4).strip()
+                if len(pair_text) > 100:
+                    pair_text = pair_text[:100] + "..."
+                self.reastream_pairs_label.config(
+                    text=(
+                        f"ReaStream pairs: sel={selected_pair} | sr={sample_rate} | "
+                        f"ch={total_ch} | {pair_text}"
+                    ),
+                    foreground="#c084fc",
+                )
+                continue
+
+            sr_cal_match = SR_CAL_RE.search(line)
+            if sr_cal_match and self.sr_cal_label is not None:
+                payload = sr_cal_match.group(1).strip()
+                if payload.startswith("CALIBRATING"):
+                    self.sr_cal_label.config(
+                        text=f"SR Cal: {payload}",
+                        foreground="#f97316",
+                    )
+                elif payload.startswith("DONE"):
+                    self.sr_cal_label.config(
+                        text=f"SR Cal: {payload}",
+                        foreground="#34d399",
+                    )
+                elif payload.startswith("factor="):
+                    # Keep active corrected state green when snap factor is known.
+                    # Purple is reserved for uncertain/raw status.
+                    if "snap=raw" in payload:
+                        color = "#a78bfa"
+                    elif "factor=1.0000" in payload:
+                        color = "#9ca3af"
+                    else:
+                        color = "#34d399"
+                    self.sr_cal_label.config(
+                        text=f"SR Cal: {payload}",
+                        foreground=color,
+                    )
+                else:
+                    self.sr_cal_label.config(
+                        text=f"SR Cal: {payload}",
+                        foreground="#a78bfa",
+                    )
                 continue
 
             applied_match = TRACK_APPLIED_DB_RE.search(line)

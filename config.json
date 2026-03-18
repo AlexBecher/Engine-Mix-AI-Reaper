@@ -7,7 +7,7 @@
       "frozen": false,
       "min_db": -60.0,
       "max_db": -0.0,
-      "fader_db": -11.79
+      "fader_db": -8.85
     },
     "6": {
       "name": "drums",
@@ -23,7 +23,7 @@
       "frozen": false,
       "min_db": -30.0,
       "max_db": -0.0,
-      "fader_db": -13.34
+      "fader_db": -7.71
     },
     "8": {
       "name": "keys",
@@ -31,7 +31,7 @@
       "frozen": false,
       "min_db": -32.0,
       "max_db": -16.6,
-      "fader_db": -16.6
+      "fader_db": -26.05
     },
     "11": {
       "name": "violao",
@@ -39,7 +39,7 @@
       "frozen": false,
       "min_db": -30.0,
       "max_db": -17.0,
-      "fader_db": -17.0
+      "fader_db": -17.72
     },
     "158": {
       "name": "keys",
@@ -47,7 +47,7 @@
       "frozen": false,
       "min_db": -32.0,
       "max_db": -16.6,
-      "fader_db": -16.6
+      "fader_db": -26.8
     }
   },
   "analysis_settings": {
@@ -63,10 +63,33 @@
     "control_blend_lufs": 0.22,
     "level_gain": 0.45,
     "level_error_clip_db": 6.0,
-    "level_source": "lufs"
+    "level_source": "lufs",
+    "meter_targets": {
+      "vocals": -28.0,
+      "backing_vocals": -30.5,
+      "piano": -30.0,
+      "guitar": -30.5,
+      "violao": -30.0,
+      "bass": -30.0,
+      "drums": -29.5,
+      "other": -30.5
+    },
+    "meter_fusion": {
+      "alpha_spectral": 0.5,
+      "alpha_lufs": 0.5,
+      "gain_lufs": 0.6,
+      "max_lufs_correction_db": 1.2,
+      "deadband_lufs": 0.7,
+      "min_activity_db": -50.0,
+      "min_valid_seconds": 2.0
+    },
+    "spectral_noise_floor_db": -40.0,
+    "tonal_peak_ratio": 4.0,
+    "enable_tonal_peak_guard": true,
+    "enable_single_source_spectral_guard": true
   },
   "run_settings": {
-    "profile": "MIDI",
+    "profile": "Worship-PA-Calibrated",
     "reastream": true,
     "reastream_identifier": "master",
     "reastream_host": "127.0.0.1",
@@ -77,6 +100,7 @@
     "webapi_timeout": 2.5,
     "channels": 2,
     "analysis_interval": 0.8,
+    "calibrate_freq": 0.0,
     "verbose": true
   },
   "lineup": {
@@ -250,12 +274,12 @@
     }
   },
   "dry_run_settings": {
-    "enabled": true,
-    "audio_source": "reastream",
-    "file_path": "C:/Users/XB7U/Downloads/quem.wav",
+    "enabled": false,
+    "audio_source": "file",
+    "file_path": "C:/Users/XB7U/VM/Mix_Robo/320.mp3",
     "loop_count": 1,
     "device_id": null,
-    "device_name": "28: Alto-falante (Realtek HD Audio 2nd output with SST)",
+    "device_name": "7: Driver de captura de som primário",
     "sample_rate": 44100,
     "blocksize": 4096,
     "channels": 2

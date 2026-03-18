@@ -24,7 +24,7 @@ from config_manager import (
     is_dry_run_enabled,
 )
 
-SAMPLE_RATE = 44100
+SAMPLE_RATE = 48000
 
 # Load configuration from config.json
 _config = load_config()
@@ -55,6 +55,24 @@ LEVEL_DEADBAND_DB = settings.get("level_deadband_db", 0.75)
 LEVEL_SOURCE = str(settings.get("level_source", "lufs")).strip().lower()
 LEVEL_ROLE_TARGETS_LUFS = settings.get("level_role_targets_lufs", {})
 LEVEL_ROLE_TARGETS_RMS = settings.get("level_role_targets_rms", {})
+
+# ── meter_fusion (structured tuning block) ─────────────────────────────────
+_mf = settings.get("meter_fusion", {})
+if not isinstance(_mf, dict):
+    _mf = {}
+METER_ALPHA_SPEC          = _mf.get("alpha_spectral",          settings.get("control_blend_spec", 0.5))
+METER_ALPHA_LUFS          = _mf.get("alpha_lufs",              settings.get("control_blend_lufs", 0.5))
+METER_GAIN_LUFS           = _mf.get("gain_lufs",               settings.get("level_gain", 0.6))
+METER_MAX_LUFS_CORRECTION_DB = _mf.get("max_lufs_correction_db", settings.get("level_error_clip_db", 1.2))
+METER_DEADBAND_LUFS       = _mf.get("deadband_lufs",           settings.get("level_deadband_db", 0.7))
+METER_MIN_ACTIVITY_DB     = _mf.get("min_activity_db", -50.0)
+METER_MIN_VALID_SECONDS   = _mf.get("min_valid_seconds", 2.0)
+METER_TARGETS_RAW = settings.get("meter_targets", {})
+SPECTRAL_NOISE_FLOOR_DB = settings.get("spectral_noise_floor_db", -40.0)
+TONAL_PEAK_RATIO = settings.get("tonal_peak_ratio", 4.0)
+ENABLE_TONAL_PEAK_GUARD = settings.get("enable_tonal_peak_guard", True)
+ENABLE_SINGLE_SOURCE_SPECTRAL_GUARD = settings.get("enable_single_source_spectral_guard", True)
+
 try:
     SILENCE_FLOOR_RMS = float(SILENCE_FLOOR_RMS)
 except (TypeError, ValueError):
@@ -71,6 +89,14 @@ def _safe_float(value, default):
     if not np.isfinite(parsed):
         return float(default)
     return float(parsed)
+
+
+def _safe_bool(value, default):
+    if isinstance(value, bool):
+        return value
+    if value is None:
+        return bool(default)
+    return str(value).strip().lower() not in {"", "0", "false", "no", "off"}
 
 
 def _normalize_blend_weights(alpha_spec, alpha_level):
@@ -114,6 +140,31 @@ if LEVEL_SOURCE not in ("lufs", "rms", "rms_db"):
 LEVEL_ROLE_TARGETS_LUFS = _sanitize_role_targets(LEVEL_ROLE_TARGETS_LUFS, DEFAULT_LEVEL_ROLE_TARGETS)
 LEVEL_ROLE_TARGETS_RMS = _sanitize_role_targets(LEVEL_ROLE_TARGETS_RMS, DEFAULT_LEVEL_ROLE_TARGETS)
 
+# ── meter_targets per-role LUFS defaults (short-term ~3s, musical para automação ao vivo) ──
+DEFAULT_METER_TARGETS = {
+    "vocals":         -28.0,
+    "lead":           -28.0,
+    "lead_vocal":     -28.0,
+    "backing_vocals": -30.5,
+    "piano":          -30.0,
+    "guitar":         -30.5,
+    "violao":         -30.0,
+    "bass":           -30.0,
+    "drums":          -29.5,
+    "other":          -30.5,
+}
+METER_ALPHA_SPEC, METER_ALPHA_LUFS = _normalize_blend_weights(METER_ALPHA_SPEC, METER_ALPHA_LUFS)
+METER_GAIN_LUFS              = max(0.0, _safe_float(METER_GAIN_LUFS, 0.6))
+METER_MAX_LUFS_CORRECTION_DB = max(0.1, _safe_float(METER_MAX_LUFS_CORRECTION_DB, 1.2))
+METER_DEADBAND_LUFS          = max(0.0, _safe_float(METER_DEADBAND_LUFS, 0.7))
+METER_MIN_ACTIVITY_DB        = _safe_float(METER_MIN_ACTIVITY_DB, -50.0)
+METER_MIN_VALID_SECONDS      = max(0.0, _safe_float(METER_MIN_VALID_SECONDS, 2.0))
+METER_TARGETS = _sanitize_role_targets(METER_TARGETS_RAW, DEFAULT_METER_TARGETS)
+SPECTRAL_NOISE_FLOOR_DB = _safe_float(SPECTRAL_NOISE_FLOOR_DB, -40.0)
+TONAL_PEAK_RATIO = max(1.25, _safe_float(TONAL_PEAK_RATIO, 4.0))
+ENABLE_TONAL_PEAK_GUARD = _safe_bool(ENABLE_TONAL_PEAK_GUARD, True)
+ENABLE_SINGLE_SOURCE_SPECTRAL_GUARD = _safe_bool(ENABLE_SINGLE_SOURCE_SPECTRAL_GUARD, True)
+
 # =============================================================================
 # Web API write/read workflow
 # =============================================================================
@@ -123,8 +174,8 @@ TRACK_ROLE_BY_ID = {}
 ACTIVE_LINEUP_SCENE = ""
 
 PERCEPTUAL_BAND_KEYS = tuple(f"p{int(round(float(hz)))}" for hz in DEFAULT_GAMMATONE_CENTERS_HZ)
-METER_DB_FLOOR = -24.0
-METER_DB_CEIL = 6.0
+METER_DB_FLOOR = -96.0
+METER_DB_CEIL = 12.0
 TRACK_ERROR_SMOOTHING = 0.35
 TRACK_ERROR_SIGN_FLIP_SMOOTHING = 0.18
 FAST_RESPONSE_ERROR = 0.45
@@ -468,6 +519,9 @@ def _reload_config():
     global SILENCE_FLOOR_RMS, CONTROL_BLEND_SPEC, CONTROL_BLEND_LUFS
     global LEVEL_GAIN, LEVEL_ERROR_CLIP_DB, LEVEL_DEADBAND_DB, LEVEL_SOURCE
     global LEVEL_ROLE_TARGETS_LUFS, LEVEL_ROLE_TARGETS_RMS
+    global METER_ALPHA_SPEC, METER_ALPHA_LUFS, METER_GAIN_LUFS
+    global METER_MAX_LUFS_CORRECTION_DB, METER_DEADBAND_LUFS
+    global METER_MIN_ACTIVITY_DB, METER_MIN_VALID_SECONDS, METER_TARGETS
     
     _config = load_config()
     lineup_cfg = _config.get("lineup", {}) if isinstance(_config.get("lineup", {}), dict) else {}
@@ -522,6 +576,17 @@ def _reload_config():
     LEVEL_SOURCE = str(settings.get("level_source", "lufs")).strip().lower()
     LEVEL_ROLE_TARGETS_LUFS = settings.get("level_role_targets_lufs", {})
     LEVEL_ROLE_TARGETS_RMS = settings.get("level_role_targets_rms", {})
+    _rmf = settings.get("meter_fusion", {})
+    if not isinstance(_rmf, dict):
+        _rmf = {}
+    METER_ALPHA_SPEC          = _rmf.get("alpha_spectral",          settings.get("control_blend_spec", 0.5))
+    METER_ALPHA_LUFS          = _rmf.get("alpha_lufs",              settings.get("control_blend_lufs", 0.5))
+    METER_GAIN_LUFS           = _rmf.get("gain_lufs",               settings.get("level_gain", 0.6))
+    METER_MAX_LUFS_CORRECTION_DB = _rmf.get("max_lufs_correction_db", settings.get("level_error_clip_db", 1.2))
+    METER_DEADBAND_LUFS       = _rmf.get("deadband_lufs",           settings.get("level_deadband_db", 0.7))
+    METER_MIN_ACTIVITY_DB     = _rmf.get("min_activity_db", -50.0)
+    METER_MIN_VALID_SECONDS   = _rmf.get("min_valid_seconds", 2.0)
+    _meter_targets_raw        = settings.get("meter_targets", {})
     try:
         SILENCE_FLOOR_RMS = float(SILENCE_FLOOR_RMS)
     except (TypeError, ValueError):
@@ -537,13 +602,19 @@ def _reload_config():
         LEVEL_SOURCE = "lufs"
     LEVEL_ROLE_TARGETS_LUFS = _sanitize_role_targets(LEVEL_ROLE_TARGETS_LUFS, DEFAULT_LEVEL_ROLE_TARGETS)
     LEVEL_ROLE_TARGETS_RMS = _sanitize_role_targets(LEVEL_ROLE_TARGETS_RMS, DEFAULT_LEVEL_ROLE_TARGETS)
+    METER_ALPHA_SPEC, METER_ALPHA_LUFS = _normalize_blend_weights(METER_ALPHA_SPEC, METER_ALPHA_LUFS)
+    METER_GAIN_LUFS              = max(0.0, _safe_float(METER_GAIN_LUFS, 0.6))
+    METER_MAX_LUFS_CORRECTION_DB = max(0.1, _safe_float(METER_MAX_LUFS_CORRECTION_DB, 1.2))
+    METER_DEADBAND_LUFS          = max(0.0, _safe_float(METER_DEADBAND_LUFS, 0.7))
+    METER_MIN_ACTIVITY_DB        = _safe_float(METER_MIN_ACTIVITY_DB, -50.0)
+    METER_MIN_VALID_SECONDS      = max(0.0, _safe_float(METER_MIN_VALID_SECONDS, 2.0))
+    METER_TARGETS = _sanitize_role_targets(_meter_targets_raw, DEFAULT_METER_TARGETS)
 
 
-def _track_level_target(role, level_source):
+def _track_level_target(role):
+    """Return the short-term LUFS target for a given role."""
     role_key = str(role or "other").strip().lower() or "other"
-    if level_source in ("rms", "rms_db"):
-        return LEVEL_ROLE_TARGETS_RMS.get(role_key, LEVEL_ROLE_TARGETS_RMS.get("other", -23.0))
-    return LEVEL_ROLE_TARGETS_LUFS.get(role_key, LEVEL_ROLE_TARGETS_LUFS.get("other", -23.0))
+    return METER_TARGETS.get(role_key, METER_TARGETS.get("other", -30.5))
 
 
 def _compute_level_delta_db(track, role, track_meters):
@@ -574,19 +645,25 @@ def _compute_level_delta_db(track, role, track_meters):
     if not np.isfinite(measured_value):
         return 0.0
 
-    target = _track_level_target(role, level_source)
-    level_error = float(target) - measured_value
-    if abs(level_error) <= LEVEL_DEADBAND_DB:
+    # Gate: ignore tracks that are effectively silent
+    if measured_value < METER_MIN_ACTIVITY_DB:
         return 0.0
 
-    # Remove the neutral zone offset so only meaningful deviations drive control.
-    if level_error > 0.0:
-        level_error -= LEVEL_DEADBAND_DB
-    else:
-        level_error += LEVEL_DEADBAND_DB
+    target = _track_level_target(role)
+    level_error = float(target) - measured_value
 
-    level_error = float(np.clip(level_error, -LEVEL_ERROR_CLIP_DB, LEVEL_ERROR_CLIP_DB))
-    return float(LEVEL_GAIN * level_error)
+    # Deadband: small deviations within the neutral zone are ignored
+    if abs(level_error) <= METER_DEADBAND_LUFS:
+        return 0.0
+
+    # Remove the neutral-zone offset so only meaningful deviations drive control
+    if level_error > 0.0:
+        level_error -= METER_DEADBAND_LUFS
+    else:
+        level_error += METER_DEADBAND_LUFS
+
+    level_error = float(np.clip(level_error, -METER_MAX_LUFS_CORRECTION_DB, METER_MAX_LUFS_CORRECTION_DB))
+    return float(METER_GAIN_LUFS * level_error)
 
 def _error_to_desired_db(error):
     """Convert band error into a relative dB delta for a track."""
@@ -731,7 +808,6 @@ P640_SINGLE_NEG_DAMPING = 0.45
 VOCAL_ROLES = {"vocals", "backing_vocals"}
 TRACK_ACTIVITY_RMS_DB_THRESHOLD = -50.0
 TRACK_ACTIVITY_LUFS_THRESHOLD = -48.0
-PROXY_ROLE_ACTIVITY_DB_THRESHOLD = -10.0
 
 ROLE_ACTIVITY_PROXY_BANDS = {
     "vocals": ("p640", "p1200", "p2500", "p5000", "p10000"),
@@ -780,13 +856,13 @@ def _is_track_meter_active(meter):
     rms_db = meter.get("rms_db")
     if rms_db is not None:
         rms_val = _safe_float(rms_db, np.nan)
-        if np.isfinite(rms_val) and rms_val >= TRACK_ACTIVITY_RMS_DB_THRESHOLD:
+        if np.isfinite(rms_val) and rms_val >= METER_MIN_ACTIVITY_DB:
             return True
 
     lufs = meter.get("lufs")
     if lufs is not None:
         lufs_val = _safe_float(lufs, np.nan)
-        if np.isfinite(lufs_val) and lufs_val >= TRACK_ACTIVITY_LUFS_THRESHOLD:
+        if np.isfinite(lufs_val) and lufs_val >= METER_MIN_ACTIVITY_DB:
             return True
 
     return False
@@ -818,9 +894,113 @@ def _active_roles_from_band_meter_proxy(band_meter_db):
         if not values:
             continue
         mean_db = float(np.mean(values))
-        if mean_db >= PROXY_ROLE_ACTIVITY_DB_THRESHOLD:
+        if mean_db >= METER_MIN_ACTIVITY_DB:
             active_roles.add(role)
     return active_roles
+
+
+def _candidate_tracks_from_actions(actions, track_map):
+    candidates = []
+    for band, _error in actions:
+        candidates.extend(_resolve_tracks_for_band(track_map, band))
+    return sorted({int(track) for track in candidates}) if candidates else []
+
+
+def _build_spectral_guard_state(band_values, band_meter_db):
+    pairs = []
+    if isinstance(band_values, dict):
+        for band, value in band_values.items():
+            value_f = _safe_float(value, 0.0)
+            if np.isfinite(value_f) and value_f > 0.0:
+                pairs.append((str(band), value_f))
+
+    pairs.sort(key=lambda item: item[1], reverse=True)
+    dominant_band = pairs[0][0] if pairs else None
+    dominant_value = pairs[0][1] if pairs else 0.0
+    second_value = pairs[1][1] if len(pairs) > 1 else 0.0
+    peak_ratio = dominant_value / max(1e-6, second_value)
+    dominant_db = _safe_float((band_meter_db or {}).get(dominant_band), METER_DB_FLOOR) if dominant_band else METER_DB_FLOOR
+    tonal_peak = (
+        ENABLE_TONAL_PEAK_GUARD
+        and bool(dominant_band)
+        and dominant_db >= SPECTRAL_NOISE_FLOOR_DB
+        and peak_ratio >= TONAL_PEAK_RATIO
+    )
+    return {
+        "dominant_band": dominant_band,
+        "dominant_value": float(dominant_value),
+        "second_value": float(second_value),
+        "peak_ratio": float(peak_ratio),
+        "dominant_db": float(dominant_db),
+        "tonal_peak": tonal_peak,
+    }
+
+
+def _filter_actions_with_spectral_guards(actions, track_map, band_values, band_meter_db, debug=False):
+    if not actions:
+        return actions, {
+            "dominant_band": None,
+            "peak_ratio": 0.0,
+            "tonal_peak": False,
+            "single_source": False,
+            "active_roles": [],
+        }
+
+    guard_state = _build_spectral_guard_state(band_values, band_meter_db)
+    dominant_band = guard_state["dominant_band"]
+    active_roles = set()
+
+    if ENABLE_SINGLE_SOURCE_SPECTRAL_GUARD:
+        candidate_tracks = _candidate_tracks_from_actions(actions, track_map)
+        if candidate_tracks:
+            try:
+                candidate_meters = get_tracks_lufs_rms(candidate_tracks, verbose=debug)
+                active_roles = _active_roles_from_track_meters(candidate_tracks, candidate_meters)
+            except Exception as exc:
+                if debug:
+                    print(f"[process] Spectral guard meter read failed: {exc}")
+
+    single_source = bool(active_roles) and len(active_roles) <= 1 and bool(dominant_band)
+    filtered_actions = []
+    for band, error in actions:
+        band_db = _safe_float((band_meter_db or {}).get(band), METER_DB_FLOOR)
+
+        if np.isfinite(band_db) and band_db < SPECTRAL_NOISE_FLOOR_DB:
+            if debug:
+                print(
+                    f"[DIAG] Spectral guard: band {band} ignored "
+                    f"(meter={band_db:+.2f}dB < floor {SPECTRAL_NOISE_FLOOR_DB:+.2f}dB)"
+                )
+            continue
+
+        if dominant_band and band != dominant_band and guard_state["tonal_peak"]:
+            if debug:
+                print(
+                    f"[DIAG] Tonal peak guard: band {band} ignored "
+                    f"(dominant={dominant_band}, ratio={guard_state['peak_ratio']:.2f})"
+                )
+            continue
+
+        if dominant_band and band != dominant_band and single_source:
+            if debug:
+                print(
+                    f"[DIAG] Single-source guard: band {band} ignored "
+                    f"(dominant={dominant_band}, active_roles={sorted(active_roles)})"
+                )
+            continue
+
+        filtered_actions.append((band, error))
+
+    if debug:
+        print(
+            f"[DIAG] Spectral guard state: dominant={dominant_band} "
+            f"ratio={guard_state['peak_ratio']:.2f} tonal_peak={guard_state['tonal_peak']} "
+            f"single_source={single_source} active_roles={sorted(active_roles)}"
+        )
+
+    guard_state["single_source"] = single_source
+    guard_state["active_roles"] = sorted(active_roles)
+    return filtered_actions, guard_state
 
 
 def _apply_actions(actions, track_map, debug=False, dry_run=False, band_meter_db=None):
@@ -942,7 +1122,7 @@ def _apply_actions(actions, track_map, debug=False, dry_run=False, band_meter_db
 
         role = TRACK_ROLE_BY_ID.get(t, "other")
         level_delta_db = _compute_level_delta_db(t, role, track_meters)
-        delta_db = (CONTROL_BLEND_SPEC * spectral_delta_db) + (CONTROL_BLEND_LUFS * level_delta_db)
+        delta_db = (METER_ALPHA_SPEC * spectral_delta_db) + (METER_ALPHA_LUFS * level_delta_db)
 
         if abs(delta_db) < 1e-6:
             if debug:

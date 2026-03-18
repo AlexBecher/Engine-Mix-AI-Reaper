@@ -35,6 +35,79 @@ DEFAULT_REASTREAM_BUFFER_SIZE = 65536
 MIN_ANALYSIS_INTERVAL = 0.5
 
 
+def _estimate_input_peak_frequency(audio, sample_rate):
+    """Estimate the dominant raw FFT peak frequency from the incoming audio window."""
+    audio_arr = np.asarray(audio, dtype=np.float64)
+    if audio_arr.size == 0 or sample_rate is None or float(sample_rate) <= 0.0:
+        return None, None
+
+    if audio_arr.ndim <= 1:
+        channels = [audio_arr.reshape(-1)]
+    else:
+        channels = [
+            np.asarray(audio_arr[:, ch_idx], dtype=np.float64).reshape(-1)
+            for ch_idx in range(audio_arr.shape[1])
+        ]
+
+    channels = [channel for channel in channels if channel.size >= 256]
+    if not channels:
+        return None, None
+
+    min_len = min(channel.size for channel in channels)
+    channels = [channel[:min_len] for channel in channels]
+    window = np.hanning(min_len)
+    spectra = [np.abs(np.fft.rfft(channel * window)) for channel in channels]
+    spectrum = np.mean(np.asarray(spectra, dtype=np.float64), axis=0)
+    freqs = np.fft.rfftfreq(min_len, d=1.0 / float(sample_rate))
+
+    valid = np.where(freqs >= 20.0)[0]
+    if valid.size == 0:
+        return None, None
+
+    valid_spectrum = spectrum[valid]
+    if valid_spectrum.size == 0:
+        return None, None
+
+    peak_local_idx = int(np.argmax(valid_spectrum))
+    peak_idx = int(valid[peak_local_idx])
+    peak_mag = float(spectrum[peak_idx])
+    noise_floor = float(np.median(valid_spectrum))
+    peak_hz = float(freqs[peak_idx])
+    prominence = peak_mag / max(1e-12, noise_floor)
+
+    if not np.isfinite(peak_hz) or not np.isfinite(prominence) or peak_mag <= 0.0:
+        return None, None
+    return peak_hz, prominence
+
+
+def _summarize_stereo_pair_peaks(audio, sample_rate):
+    """Return dominant FFT peaks for each stereo pair in a multichannel buffer."""
+    audio_arr = np.asarray(audio, dtype=np.float64)
+    if audio_arr.ndim != 2 or audio_arr.shape[0] < 256 or audio_arr.shape[1] < 2:
+        return []
+
+    total_ch = int(audio_arr.shape[1])
+    pair_starts = list(range(0, total_ch - 1, 2))
+    summaries = []
+    for start in pair_starts:
+        pair = audio_arr[:, start:start + 2]
+        if pair.shape[1] != 2:
+            continue
+        peak_hz, prominence = _estimate_input_peak_frequency(pair, sample_rate)
+        energy = float(np.sqrt(np.mean(np.square(pair))))
+        if peak_hz is None:
+            continue
+        summaries.append(
+            {
+                "start": int(start),
+                "peak_hz": float(peak_hz),
+                "prominence": float(prominence),
+                "energy": float(energy),
+            }
+        )
+    return summaries
+
+
 def _normalize_host(host_value, fallback=DEFAULT_REASTREAM_HOST):
     host = str(host_value or "").strip()
     return host or fallback
@@ -64,58 +137,211 @@ def _decode_reastream_frames(packet, channels, identifier=None, verbose=False):
     import struct
 
     if channels <= 0:
-        return None
+        return None, None
+
+    def _select_output_channels(frame_matrix, requested_channels, sample_rate=None, decode_label=""):
+        """Select output channels robustly from decoded multi-channel packets.
+
+        For requested stereo (2ch) on packets with >2 channels, pick the stereo
+        pair with highest RMS energy. This avoids wrong routing when ReaStream
+        is configured as 8ch and the active signal is not on channels 1/2.
+        """
+        arr = np.asarray(frame_matrix)
+        if arr.ndim != 2 or arr.size == 0:
+            return arr
+
+        total_ch = int(arr.shape[1])
+        req_ch = int(max(1, requested_channels))
+        if total_ch < req_ch:
+            return arr[:, :req_ch]
+
+        if req_ch == 1:
+            channel_rms = np.sqrt(np.mean(np.square(arr.astype(np.float64)), axis=0))
+            best_idx = int(np.argmax(channel_rms))
+            if verbose and total_ch > 1:
+                print(
+                    f"[DECODE CHANNEL SELECT]{decode_label} mono from ch={best_idx} "
+                    f"(total_ch={total_ch})"
+                )
+            return arr[:, best_idx:best_idx + 1]
+
+        if req_ch == 2 and total_ch >= 2:
+            # Prefer standard bus pairs: (0,1), (2,3), (4,5), ...
+            pair_starts = list(range(0, total_ch - 1, 2))
+            if (total_ch % 2) == 1 and (total_ch - 2) not in pair_starts:
+                pair_starts.append(total_ch - 2)
+
+            best_start = 0
+            best_energy = -1.0
+            arr64 = arr.astype(np.float64, copy=False)
+            pair_summaries = []
+            for start in pair_starts:
+                pair = arr64[:, start:start + 2]
+                if pair.shape[1] != 2:
+                    continue
+                energy = float(np.sqrt(np.mean(np.square(pair))))
+                peak_hz, prominence = _estimate_input_peak_frequency(pair, sample_rate)
+                if peak_hz is not None:
+                    pair_summaries.append(
+                        f"{start}/{start + 1}@{peak_hz:.1f}Hz(e={energy:.4f},p={prominence:.1f})"
+                    )
+                if energy > best_energy:
+                    best_energy = energy
+                    best_start = int(start)
+
+            if verbose:
+                print(
+                    f"[DECODE CHANNEL SELECT]{decode_label} stereo pair={best_start}/{best_start + 1} "
+                    f"(total_ch={total_ch}, requested=2, energy={best_energy:.6f})"
+                )
+            if pair_summaries:
+                print(
+                    f"[DIAG] REASTREAM pairs sr={int(sample_rate or 0)} total_ch={total_ch} "
+                    f"selected={best_start}/{best_start + 1} :: {' | '.join(pair_summaries)}"
+                )
+            return arr[:, best_start:best_start + 2]
+
+        return arr[:, :req_ch]
+
+    def _decode_candidate(meta_start, pkt_ident_label=""):
+        """Try decoding a <float sr, uint16 ch, uint16 samples> block at meta_start."""
+        if meta_start < 0 or len(packet) < (meta_start + 8):
+            return None, None
+        try:
+            sample_rate, num_ch, num_samples = struct.unpack_from("<fHH", packet, meta_start)
+        except Exception:
+            return None, None
+
+        expected = int(num_ch) * int(num_samples) * 4
+        audio_start = int(meta_start) + 8
+        if not (
+            num_ch > 0
+            and num_samples > 0
+            and 8000 <= sample_rate <= 192000
+            and expected > 0
+            and len(packet) >= (audio_start + expected)
+        ):
+            return None, None
+
+        audio_bytes = packet[audio_start:audio_start + expected]
+        audio_data = np.frombuffer(audio_bytes, dtype=np.float32)
+        if audio_data.size != (int(num_ch) * int(num_samples)) or not np.isfinite(audio_data).all():
+            return None, None
+
+        peak = float(np.max(np.abs(audio_data))) if audio_data.size else 0.0
+        if peak < 1e-7 or peak > 16.0:
+            return None, None
+
+        frame_matrix = audio_data.reshape(int(num_samples), int(num_ch))
+        frames = _select_output_channels(
+            frame_matrix,
+            requested_channels=int(channels),
+            sample_rate=float(sample_rate),
+            decode_label=f" ident='{pkt_ident_label}'" if pkt_ident_label else "",
+        )
+        if verbose:
+            label = f" ident='{pkt_ident_label}'" if pkt_ident_label else ""
+            print(
+                f"[DECODE STRUCT]{label} sr={float(sample_rate):.0f} "
+                f"ch={int(num_ch)} -> out_ch={int(frames.shape[1])} "
+                f"samples={int(num_samples)} peak={peak:.4f}"
+            )
+        return frames, float(sample_rate)
+
+    # --- Structured parse by explicit identifier location (most reliable) ---
+    ident = str(identifier or "").strip()
+    if ident:
+        ident_bytes = ident.encode("ascii", errors="ignore") + b"\x00"
+        if ident_bytes:
+            ident_candidates = []
+            search_start = 0
+            while True:
+                ident_pos = packet.find(ident_bytes, search_start)
+                if ident_pos < 0:
+                    break
+                frames, packet_sr = _decode_candidate(ident_pos + len(ident_bytes), pkt_ident_label=ident)
+                if frames is not None:
+                    payload_bytes = int(frames.shape[0]) * int(frames.shape[1]) * 4
+                    ident_candidates.append((payload_bytes, ident_pos, frames, packet_sr))
+                search_start = ident_pos + 1
+
+            if ident_candidates:
+                # Prefer the candidate with largest coherent payload; if tied,
+                # prefer the one that appears later in the packet.
+                ident_candidates.sort(key=lambda item: (item[0], item[1]), reverse=True)
+                _payload_bytes, _ident_pos, frames, packet_sr = ident_candidates[0]
+                return frames, packet_sr
 
     # --- Structured parse (standard ReaStream format) ---
     null_pos = packet.find(b"\x00")
     if null_pos >= 0:
         try:
             pkt_ident = packet[:null_pos].decode("ascii", errors="replace")
-            meta_start = null_pos + 1
-            if len(packet) >= meta_start + 8:
-                sample_rate, num_ch, num_samples = struct.unpack_from("<fHH", packet, meta_start)
-                audio_start = meta_start + 8
-                expected = num_ch * num_samples * 4
-                if (
-                    num_ch > 0
-                    and num_samples > 0
-                    and 8000 <= sample_rate <= 192000
-                    and len(packet) >= audio_start + expected
-                ):
-                    # Identifier filter
-                    if identifier and identifier.lower() not in pkt_ident.lower():
-                        if verbose:
-                            print(f"[DECODE] Identifier mismatch: packet='{pkt_ident}' expected='{identifier}'")
-                        return None
-
-                    # Slice into a new bytes object so numpy offset=0 avoids alignment issues
-                    audio_bytes = packet[audio_start:audio_start + expected]
-                    audio_data = np.frombuffer(audio_bytes, dtype=np.float32)
-                    if np.isfinite(audio_data).all():
-                        peak = float(np.max(np.abs(audio_data)))
-                        if peak >= 1e-7:
-                            out_ch = min(num_ch, channels)
-                            frames = audio_data.reshape(num_samples, num_ch)[:, :out_ch]
-                            if verbose:
-                                print(
-                                    f"[DECODE STRUCT] ident='{pkt_ident}' sr={sample_rate:.0f} "
-                                    f"ch={num_ch} samples={num_samples} peak={peak:.4f}"
-                                )
-                            return frames
+            if ident and ident.lower() not in pkt_ident.lower():
+                if verbose:
+                    print(f"[DECODE] Identifier mismatch on first-null parse: packet='{pkt_ident}' expected='{ident}'")
+            else:
+                frames, packet_sr = _decode_candidate(null_pos + 1, pkt_ident_label=pkt_ident)
+                if frames is not None:
+                    return frames, packet_sr
         except Exception:
             pass
 
-    # --- Fallback: brute-force scan (step=1 to catch any byte alignment) ---
-    # If an identifier is configured, only allow fallback when identifier bytes
-    # are present in packet. This avoids random UDP while keeping compatibility
-    # with non-standard ReaStream packet layouts.
+    # --- Heuristic metadata scan ---
+    # Some packet variants prepend extra bytes before the identifier/meta block.
+    # Scan for plausible <float sample_rate, uint16 channels, uint16 samples>
+    # and validate by expected payload size.
     if identifier:
         ident_bytes = identifier.encode("utf-8", errors="ignore")
         if ident_bytes and ident_bytes not in packet:
             if verbose:
                 print("[DECODE] Identifier bytes not found in packet, rejecting.")
-            return None
+            return None, None
 
+    best_candidate = None
+    max_meta_probe = max(0, len(packet) - 8)
+    for meta_start in range(0, min(512, max_meta_probe + 1)):
+        try:
+            sample_rate, num_ch, num_samples = struct.unpack_from("<fHH", packet, meta_start)
+        except Exception:
+            continue
+
+        if not (8000 <= sample_rate <= 192000):
+            continue
+        if num_ch <= 0 or num_ch > 16 or num_samples <= 0:
+            continue
+
+        audio_start = meta_start + 8
+        expected = int(num_ch) * int(num_samples) * 4
+        if expected <= 0 or (audio_start + expected) > len(packet):
+            continue
+
+        # Prefer candidates with larger coherent frame payloads.
+        if best_candidate is None or expected > best_candidate[0]:
+            best_candidate = (expected, meta_start, float(sample_rate), int(num_ch), int(num_samples), audio_start)
+
+    if best_candidate is not None:
+        _expected, _meta_start, sample_rate, num_ch, num_samples, audio_start = best_candidate
+        audio_bytes = packet[audio_start:audio_start + (num_ch * num_samples * 4)]
+        audio_data = np.frombuffer(audio_bytes, dtype=np.float32)
+        if audio_data.size == (num_ch * num_samples) and np.isfinite(audio_data).all():
+            peak = float(np.max(np.abs(audio_data)))
+            if 1e-7 <= peak <= 16.0:
+                frame_matrix = audio_data.reshape(num_samples, num_ch)
+                frames = _select_output_channels(
+                    frame_matrix,
+                    requested_channels=int(channels),
+                    sample_rate=float(sample_rate),
+                    decode_label=" meta-scan",
+                )
+                if verbose:
+                    print(
+                        f"[DECODE META-SCAN] sr={sample_rate:.0f} ch={num_ch} "
+                        f"-> out_ch={int(frames.shape[1])} samples={num_samples} peak={peak:.4f}"
+                    )
+                return frames, float(sample_rate)
+
+    # --- Fallback: brute-force scan (step=1 to catch any byte alignment) ---
     max_probe = min(256, max(0, len(packet) - 4))
     for offset in range(0, max_probe + 1):  # step=1 to hit any valid alignment
         remaining = len(packet) - offset
@@ -138,12 +364,12 @@ def _decode_reastream_frames(packet, channels, identifier=None, verbose=False):
 
         if verbose:
             print(f"[DECODE FALLBACK] Found audio at offset={offset} peak={peak:.4f}")
-        return samples[:usable].reshape(-1, channels)
+        return samples[:usable].reshape(-1, channels), None
 
-    return None
+    return None, None
 
 
-def load_stems(stems_dir, stem_names=None, sample_rate=44100):
+def load_stems(stems_dir, stem_names=None, sample_rate=48000):
     if stem_names is None:
         stem_names = ["vocals", "drums", "bass", "piano", "other"]
 
@@ -164,7 +390,7 @@ def load_stems(stems_dir, stem_names=None, sample_rate=44100):
     return stems
 
 
-def load_test_audio(path, sample_rate=44100, channels=2):
+def load_test_audio(path, sample_rate=48000, channels=2):
     audio, sr = sf.read(path, dtype="float32")
 
     audio = np.asarray(audio, dtype=np.float32)
@@ -204,7 +430,20 @@ def main():
             "If omitted, defaults to learning/separated/<profile>."
         ),
     )
-    parser.add_argument("--sr", type=int, default=44100, help="Sample rate to use")
+    parser.add_argument("--sr", type=int, default=48000, help="Sample rate to use")
+    parser.add_argument(
+        "--calibrate-freq",
+        type=float,
+        default=0.0,
+        dest="calibrate_freq",
+        help=(
+            "Reference frequency in Hz for automatic SR calibration. "
+            "Play a pure tone at this frequency (e.g. 320) while the robot is running "
+            "and it will measure the FFT peak, compute the correction factor, and "
+            "apply it to all subsequent analysis. Octave errors (x0.5 / x2) are "
+            "snapped automatically if the correction is within 15%% of a power of 2."
+        ),
+    )
 
     # Track mapping
     parser.add_argument(
@@ -506,14 +745,71 @@ def main():
             if channel_map is not None:
                 print(f"Using channel map: {channel_map}")
 
-        def _process_audio(audio, map_for_audio):
+        def _process_audio(audio, map_for_audio, sample_rate_override=None):
+            effective_sr_base = int(sample_rate_override) if sample_rate_override else int(args.sr)
+            correction = float(analysis_state.get("sr_correction_factor", 1.0))
+            effective_sr = max(8000, min(192000, round(effective_sr_base * correction)))
+
+            input_peak_hz, input_prominence = _estimate_input_peak_frequency(audio, effective_sr)
+            if input_peak_hz is not None:
+                channel_count = 1 if np.asarray(audio).ndim <= 1 else int(np.asarray(audio).shape[1])
+                print(
+                    f"[DIAG] INPUT FFT peak_hz={input_peak_hz:.1f} "
+                    f"prominence={input_prominence:.1f} sr={effective_sr} channels={channel_count}"
+                )
+
+                # ── SR auto-calibration ─────────────────────────────────────────────
+                cal_freq = float(getattr(args, "calibrate_freq", 0.0) or 0.0)
+                if cal_freq > 0.0 and input_peak_hz is not None and float(input_prominence or 0.0) >= 3.0:
+                    cal = analysis_state["_calibration"]
+                    if not cal["done"]:
+                        cal["peaks"].append(input_peak_hz)
+                        n = len(cal["peaks"])
+                        print(f"[SR-CAL] CALIBRATING ref_hz={cal_freq:.1f} n={n}/3")
+                        if n >= 3:
+                            measured = float(np.median(cal["peaks"]))
+                            raw_factor = cal_freq / measured
+                            # Octave-snap: pick closest power-of-2 if within ±15 %
+                            snap_factor = raw_factor
+                            snap_label = "raw"
+                            for candidate in [0.25, 0.5, 1.0, 2.0, 4.0]:
+                                if abs(raw_factor / candidate - 1.0) < 0.15:
+                                    snap_factor = candidate
+                                    snap_label = f"{candidate}x"
+                                    break
+                            analysis_state["sr_correction_factor"] = snap_factor
+                            correction = snap_factor
+                            cal["done"] = True
+                            effective_sr = max(8000, min(192000, round(effective_sr_base * snap_factor)))
+                            print(
+                                f"[SR-CAL] DONE measured_hz={measured:.1f} ref_hz={cal_freq:.1f} "
+                                f"raw={raw_factor:.4f} factor={snap_factor:.4f} snap={snap_label} "
+                                f"new_sr={effective_sr}"
+                            )
+
+                # ── Emit ongoing SR-CAL status when a correction is active ──────────
+                if correction != 1.0:
+                    snap_label = "raw"
+                    for candidate in [0.25, 0.5, 1.0, 2.0, 4.0]:
+                        if abs(correction / candidate - 1.0) < 0.01:
+                            snap_label = f"{candidate}x"
+                            break
+                    print(
+                        f"[SR-CAL] factor={correction:.4f} base_sr={effective_sr_base} "
+                        f"eff_sr={effective_sr} snap={snap_label}"
+                    )
+                # ───────────────────────────────────────────────────────────────────
+
             if args.verbose:
-                print(f"[_PROCESS_AUDIO] Chamando process() com audio shape {audio.shape}, profile '{args.profile}'")
+                print(
+                    f"[_PROCESS_AUDIO] Chamando process() com audio shape {audio.shape}, "
+                    f"sr={effective_sr}, profile '{args.profile}'"
+                )
             # Pass profiles=None so mix_profile._load_profiles() rereads profiles.json
             # on every cycle, picking up any changes made while the script is running.
             process(
                 audio,
-                sample_rate=args.sr,
+                sample_rate=effective_sr,
                 profile_name=args.profile,
                 stem_track_map=map_for_audio,
                 profiles=None,
@@ -530,6 +826,9 @@ def main():
             "channel_chunks": {},
             "channel_samples": {},
             "channel_last": {},
+            "stream_sr": float(args.sr),
+            "sr_correction_factor": 1.0,
+            "_calibration": {"peaks": [], "done": False},
         }
 
         if args.verbose:
@@ -539,6 +838,8 @@ def main():
             )
 
         def _process_pending_windows(now, force=False):
+            active_sr = float(analysis_state.get("stream_sr") or args.sr)
+            min_samples_required = max(1024, int(active_sr * 0.5))
             if channel_map:
                 for ch_idx, track in channel_map.items():
                     analysis_state["channel_last"].setdefault(ch_idx, now)
@@ -546,7 +847,7 @@ def main():
                     elapsed = now - analysis_state["channel_last"][ch_idx]
                     if not force and elapsed < args.analysis_interval:
                         continue
-                    if analysis_state["channel_samples"].get(ch_idx, 0) < min_samples_for_analysis:
+                    if analysis_state["channel_samples"].get(ch_idx, 0) < min_samples_required:
                         continue
 
                     window_audio = np.concatenate(analysis_state["channel_chunks"][ch_idx], axis=0)
@@ -567,13 +868,13 @@ def main():
                             f"[PROCESS] Janela canal {ch_idx} pronta "
                             f"({window_audio.shape[0]} samples) -> track {track}"
                         )
-                    _process_audio(window_audio, band_map)
+                    _process_audio(window_audio, band_map, sample_rate_override=active_sr)
                 return
 
             elapsed = now - analysis_state["stereo_last"]
             if not force and elapsed < args.analysis_interval:
                 return
-            if analysis_state["stereo_samples"] < min_samples_for_analysis:
+            if analysis_state["stereo_samples"] < min_samples_required:
                 return
 
             window_audio = np.concatenate(analysis_state["stereo_chunks"], axis=0)
@@ -586,10 +887,18 @@ def main():
                     f"[PROCESS] Janela pronta ({window_audio.shape[0]} samples). "
                     f"Processando profile '{args.profile}' em {'stereo' if window_audio.ndim > 1 else 'mono'}"
                 )
-            _process_audio(window_audio, track_map)
+            _process_audio(window_audio, track_map, sample_rate_override=active_sr)
 
-        def _buffer_and_maybe_process(frames, now=None, force=False):
+        def _buffer_and_maybe_process(frames, now=None, force=False, stream_sr=None):
             current_time = time.monotonic() if now is None else float(now)
+
+            if stream_sr is not None:
+                try:
+                    parsed_sr = float(stream_sr)
+                except (TypeError, ValueError):
+                    parsed_sr = 0.0
+                if 8000.0 <= parsed_sr <= 192000.0:
+                    analysis_state["stream_sr"] = parsed_sr
 
             if frames is not None:
                 frame_array = np.asarray(frames)
@@ -730,7 +1039,12 @@ def main():
                     if args.verbose:
                         print(f"[UDP RECV #{packet_count}] Pacote de {len(data)} bytes recebido")
 
-                    frames = _decode_reastream_frames(data, args.channels, identifier=ident or None, verbose=args.verbose)
+                    frames, packet_sr = _decode_reastream_frames(
+                        data,
+                        args.channels,
+                        identifier=ident or None,
+                        verbose=args.verbose,
+                    )
 
                     if frames is None:
                         if args.verbose:
@@ -739,9 +1053,19 @@ def main():
 
                     if args.verbose:
                         peak = np.max(np.abs(frames))
-                        print(f"[DECODE OK #{packet_count}] {frames.shape[0]} samples, {frames.shape[1]} channels, peak: {peak:.4f}")
+                        sr_text = f"{packet_sr:.0f}" if packet_sr is not None else "unknown"
+                        print(
+                            f"[DECODE OK #{packet_count}] {frames.shape[0]} samples, {frames.shape[1]} channels, "
+                            f"sr={sr_text}, peak: {peak:.4f}"
+                        )
 
-                    _buffer_and_maybe_process(frames)
+                    if packet_sr is not None and abs(float(packet_sr) - float(args.sr)) > 1.0:
+                        print(
+                            f"[REASTREAM SR] packet_sr={packet_sr:.1f}Hz "
+                            f"configured_sr={float(args.sr):.1f}Hz"
+                        )
+
+                    _buffer_and_maybe_process(frames, stream_sr=packet_sr)
             except KeyboardInterrupt:
                 print("Live capture stopped.")
             finally:
