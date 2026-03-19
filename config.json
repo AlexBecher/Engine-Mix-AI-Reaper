@@ -1,45 +1,61 @@
 {
   "master_track": 1,
   "tracks": {
-    "2": {
-      "name": "guitar",
+    "3": {
+      "name": "back",
       "enabled": true,
       "frozen": false,
-      "min_db": -32.0,
-      "max_db": 0.0,
-      "fader_db": -7.24
+      "min_db": -30.0,
+      "max_db": -9.0,
+      "fader_db": -10.25
     },
-    "3": {
-      "name": "drums",
-      "enabled": true,
-      "frozen": true,
-      "min_db": -28.0,
-      "max_db": 3.0,
-      "fader_db": -4.82
-    },
-    "11": {
+    "5": {
       "name": "lead",
       "enabled": true,
       "frozen": false,
       "min_db": -30.0,
-      "max_db": 0.0,
-      "fader_db": -15.05
+      "max_db": -9.0,
+      "fader_db": -16.03
     },
-    "12": {
+    "6": {
+      "name": "drums",
+      "enabled": true,
+      "frozen": true,
+      "min_db": -28.0,
+      "max_db": -13.1,
+      "fader_db": -18.13
+    },
+    "7": {
+      "name": "baixo",
+      "enabled": false,
+      "frozen": false,
+      "min_db": -30.0,
+      "max_db": 0.0,
+      "fader_db": -30.0
+    },
+    "8": {
       "name": "keys",
       "enabled": true,
       "frozen": false,
       "min_db": -30.0,
       "max_db": 0.0,
-      "fader_db": -14.94
+      "fader_db": -3.4
     },
-    "13": {
-      "name": "baixo",
+    "11": {
+      "name": "guitar",
+      "enabled": true,
+      "frozen": false,
+      "min_db": -32.0,
+      "max_db": -4.87,
+      "fader_db": -13.89
+    },
+    "158": {
+      "name": "keys",
       "enabled": true,
       "frozen": false,
       "min_db": -30.0,
       "max_db": 0.0,
-      "fader_db": -30.0
+      "fader_db": -5.13
     }
   },
   "analysis_settings": {
@@ -73,7 +89,7 @@
       "max_lufs_correction_db": 1.0,
       "deadband_lufs": 1.0,
       "min_activity_db": -50.0,
-      "meter_peak_min_activity_db": -1300.0,
+      "meter_peak_min_activity_db": -1200.0,
       "guardian_gate_threshold_db": 10.0,
       "min_valid_seconds": 2.0
     },
@@ -83,12 +99,12 @@
     "enable_single_source_spectral_guard": true
   },
   "run_settings": {
-    "profile": "Profile_learn_004",
+    "profile": "Profile_learn_006",
     "reastream": true,
     "reastream_identifier": "master",
-    "reastream_host": "127.0.0.1",
+    "reastream_host": "10.0.0.111",
     "reastream_port": 58710,
-    "webapi_host": "127.0.0.1",
+    "webapi_host": "10.0.0.111",
     "webapi_port": 8080,
     "webapi_base": "/_",
     "webapi_timeout": 2.5,
@@ -258,7 +274,6 @@
       "icon_roles": {
         "present_roles": [
           "backing_vocals",
-          "bass",
           "vocals",
           "guitar",
           "piano",

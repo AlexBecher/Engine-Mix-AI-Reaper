@@ -148,6 +148,7 @@ class ConfigGUI:
         self.scroll_window_id = None
 
         self.process_handle = None
+        self.active_process_cmd = None
         self.output_queue = queue.Queue()
         self.runtime_log_handle = None
         self.runtime_log_path = None
@@ -2394,11 +2395,24 @@ class ConfigGUI:
         }
         return cfg
 
-    def _save_config(self):
+    def _command_signature(self, cmd):
+        return tuple(str(part) for part in (cmd or []))
+
+    def _save_config(self, apply_runtime=True):
         try:
             self.config = self._collect_config_from_ui()
             save_config(self.config, CONFIG_FILE)
             self._refresh_profile_options()
+
+            if apply_runtime and self.process_handle is not None:
+                new_cmd = self._build_run_command()
+                if self._command_signature(new_cmd) != self.active_process_cmd:
+                    self._restart_process(
+                        cmd=new_cmd,
+                        status_text="[OK] Config saved | runtime reapplied",
+                    )
+                    return
+
             self.status_label.config(text="[OK] Config saved", foreground="green")
         except Exception as exc:
             self.status_label.config(text=f"[ERROR] {exc}", foreground="red")
@@ -2697,10 +2711,12 @@ class ConfigGUI:
         self.runtime_log_handle = None
         self.runtime_log_path = None
 
-    def _start_process(self):
+    def _start_process(self, cmd=None, save_before_start=True, status_text=None):
         try:
-            self._save_config()
-            cmd = self._build_run_command()
+            if save_before_start:
+                self._save_config(apply_runtime=False)
+            if cmd is None:
+                cmd = self._build_run_command()
             self._open_runtime_log(cmd)
             self.process_handle = subprocess.Popen(
                 cmd,
@@ -2713,10 +2729,14 @@ class ConfigGUI:
                 errors="replace",
                 bufsize=1,
             )
-            threading.Thread(target=self._read_process_output, daemon=True).start()
+            self.active_process_cmd = self._command_signature(cmd)
+            process_handle = self.process_handle
+            threading.Thread(target=self._read_process_output, args=(process_handle,), daemon=True).start()
             self._set_start_stop_button_visual(True)
             self.runtime_label.config(text="Running", foreground="green")
-            if self.runtime_log_path is not None:
+            if status_text is not None:
+                self.status_label.config(text=status_text, foreground="green")
+            elif self.runtime_log_path is not None:
                 self.status_label.config(
                     text=f"[OK] Script started | log: {self.runtime_log_path.name}",
                     foreground="green",
@@ -2734,8 +2754,13 @@ class ConfigGUI:
         except Exception as exc:
             self._close_runtime_log()
             self.process_handle = None
+            self.active_process_cmd = None
             self.status_label.config(text=f"[ERROR] Start failed: {exc}", foreground="red")
             messagebox.showerror("Start error", str(exc))
+
+    def _restart_process(self, cmd, status_text=None):
+        self._stop_process(manual=False)
+        self._start_process(cmd=cmd, save_before_start=False, status_text=status_text)
 
     def _stop_process(self, manual=False):
         if self.process_handle is None:
@@ -2750,6 +2775,7 @@ class ConfigGUI:
                 pass
         finally:
             self.process_handle = None
+            self.active_process_cmd = None
             self._close_runtime_log()
             self._set_start_stop_button_visual(False)
             self.runtime_label.config(text="Stopped", foreground="red")
@@ -2768,15 +2794,19 @@ class ConfigGUI:
                 else:
                     self.status_label.config(text="[OK] Script stopped", foreground="blue")
 
-    def _read_process_output(self):
-        if self.process_handle is None or self.process_handle.stdout is None:
+    def _read_process_output(self, process_handle):
+        if process_handle is None or process_handle.stdout is None:
             return
         try:
-            for line in self.process_handle.stdout:
-                self._write_runtime_log(line.rstrip("\n"))
-                self.output_queue.put(line.rstrip("\n"))
+            for line in process_handle.stdout:
+                if self.process_handle is not process_handle:
+                    continue
+                clean_line = line.rstrip("\n")
+                self._write_runtime_log(clean_line)
+                self.output_queue.put(clean_line)
         finally:
-            self.output_queue.put("__PROCESS_ENDED__")
+            if self.process_handle is process_handle:
+                self.output_queue.put("__PROCESS_ENDED__")
 
     def _schedule_ui_updates(self):
         self._drain_output_queue()

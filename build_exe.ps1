@@ -7,14 +7,27 @@ $root = Split-Path -Parent $MyInvocation.MyCommand.Path
 Set-Location $root
 
 $pythonCandidates = @(
-    (Join-Path $root "venv\Scripts\python.exe"),
-    (Join-Path $root ".venv\Scripts\python.exe")
+    (Join-Path $root ".venv\Scripts\python.exe"),
+    (Join-Path $root "venv\Scripts\python.exe")
 )
 
-$python = $pythonCandidates | Where-Object { Test-Path $_ } | Select-Object -First 1
-if (-not $python) {
+$availablePython = $pythonCandidates | Where-Object { Test-Path $_ }
+if (-not $availablePython) {
     $paths = $pythonCandidates -join " or "
     throw "Python venv not found. Expected $paths"
+}
+
+$python = $null
+foreach ($candidate in $availablePython) {
+    $hasPyInstaller = & $candidate -c "import importlib.util, sys; sys.exit(0 if importlib.util.find_spec('PyInstaller') else 1)"
+    if ($LASTEXITCODE -eq 0) {
+        $python = $candidate
+        break
+    }
+}
+
+if (-not $python) {
+    $python = $availablePython | Select-Object -First 1
 }
 
 Write-Host "Using Python from: $python"
@@ -35,31 +48,15 @@ else {
 
 $imgDir = Join-Path $root "img"
 $iconPath = Join-Path $imgDir "icon.png"
-$faderPath = Join-Path $imgDir "fader.png"
-$faderBottomPath = Join-Path $imgDir "fader_buttom.png"
-$backPngPath = Join-Path $imgDir "back.png"
-$bassPngPath = Join-Path $imgDir "bass.png"
-$drumPngPath = Join-Path $imgDir "drum.png"
-$guitarsPngPath = Join-Path $imgDir "guitars.png"
-$keysPngPath = Join-Path $imgDir "keys.png"
-$leadPngPath = Join-Path $imgDir "lead.png"
-$checkInPngPath = Join-Path $imgDir "checkin.png"
-$checkOutPngPath = Join-Path $imgDir "checkout.png"
-$deletePngPath = Join-Path $imgDir "del.png"
-$startPngPath = Join-Path $imgDir "start.png"
-$stopPngPath = Join-Path $imgDir "stop.png"
-$savePngPath = Join-Path $imgDir "save.png"
-$learnPngPath = Join-Path $imgDir "learn.png"
-$dryPngPath = Join-Path $imgDir "dry.png"
-$applyPngPath = Join-Path $imgDir "apply.png"
 $buildAssetsDir = Join-Path $root "build"
 $iconPngBuildPath = Join-Path $buildAssetsDir "icon_256.png"
 $iconBuildPath = Join-Path $buildAssetsDir "icon_256.ico"
 
-foreach ($asset in @($iconPath, $faderPath, $faderBottomPath, $backPngPath, $bassPngPath, $drumPngPath, $guitarsPngPath, $keysPngPath, $leadPngPath, $checkInPngPath, $checkOutPngPath, $deletePngPath, $startPngPath, $stopPngPath, $savePngPath, $learnPngPath, $dryPngPath, $applyPngPath)) {
-    if (!(Test-Path $asset)) {
-        throw "Required asset not found: $asset"
-    }
+if (!(Test-Path $imgDir)) {
+    throw "Required asset folder not found: $imgDir"
+}
+if (!(Test-Path $iconPath)) {
+    throw "Required icon not found: $iconPath"
 }
 
 function Invoke-PyInstaller {
@@ -165,24 +162,7 @@ Invoke-PyInstaller @(
     "--name", "AlexStudioMix",
     "--windowed",
     "--icon", $iconBuildPath,
-    "--add-data", "$iconPath;img",
-    "--add-data", "$faderPath;img",
-    "--add-data", "$faderBottomPath;img",
-    "--add-data", "$backPngPath;img",
-    "--add-data", "$bassPngPath;img",
-    "--add-data", "$drumPngPath;img",
-    "--add-data", "$guitarsPngPath;img",
-    "--add-data", "$keysPngPath;img",
-    "--add-data", "$leadPngPath;img",
-    "--add-data", "$checkInPngPath;img",
-    "--add-data", "$checkOutPngPath;img",
-    "--add-data", "$deletePngPath;img",
-    "--add-data", "$startPngPath;img",
-    "--add-data", "$stopPngPath;img",
-    "--add-data", "$savePngPath;img",
-    "--add-data", "$learnPngPath;img",
-    "--add-data", "$dryPngPath;img",
-    "--add-data", "$applyPngPath;img",
+    "--add-data", "$imgDir;img",
     "--hidden-import", "soundfile",
     "--hidden-import", "sounddevice",
     "--hidden-import", "pyloudnorm",
@@ -217,25 +197,8 @@ Copy-Item $workerExe "$appDir\run_profile_worker.exe" -Force
 
 # Keep image assets inside dist/img for organized runtime loading.
 $appImgDir = Join-Path $appDir "img"
-if (!(Test-Path $appImgDir)) { New-Item -ItemType Directory -Path $appImgDir | Out-Null }
-Copy-Item $iconPath "$appImgDir\icon.png" -Force
-Copy-Item $faderPath "$appImgDir\fader.png" -Force
-Copy-Item $faderBottomPath "$appImgDir\fader_buttom.png" -Force
-Copy-Item $backPngPath "$appImgDir\back.png" -Force
-Copy-Item $bassPngPath "$appImgDir\bass.png" -Force
-Copy-Item $drumPngPath "$appImgDir\drum.png" -Force
-Copy-Item $guitarsPngPath "$appImgDir\guitars.png" -Force
-Copy-Item $keysPngPath "$appImgDir\keys.png" -Force
-Copy-Item $leadPngPath "$appImgDir\lead.png" -Force
-Copy-Item $checkInPngPath "$appImgDir\checkin.png" -Force
-Copy-Item $checkOutPngPath "$appImgDir\checkout.png" -Force
-Copy-Item $deletePngPath "$appImgDir\del.png" -Force
-Copy-Item $startPngPath "$appImgDir\start.png" -Force
-Copy-Item $stopPngPath "$appImgDir\stop.png" -Force
-Copy-Item $savePngPath "$appImgDir\save.png" -Force
-Copy-Item $learnPngPath "$appImgDir\learn.png" -Force
-Copy-Item $dryPngPath "$appImgDir\dry.png" -Force
-Copy-Item $applyPngPath "$appImgDir\apply.png" -Force
+if (Test-Path $appImgDir) { Remove-Item $appImgDir -Recurse -Force }
+Copy-Item $imgDir $appImgDir -Recurse -Force
 
 # Create logs folder for dry-run logs
 if (!(Test-Path "$appDir\logs")) { New-Item -ItemType Directory -Path "$appDir\logs" | Out-Null }

@@ -110,6 +110,8 @@ def _summarize_stereo_pair_peaks(audio, sample_rate):
 
 def _normalize_host(host_value, fallback=DEFAULT_REASTREAM_HOST):
     host = str(host_value or "").strip()
+    if host == "127.0.0.0":
+        return "127.0.0.1"
     return host or fallback
 
 
