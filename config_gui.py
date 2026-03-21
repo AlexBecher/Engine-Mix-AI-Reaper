@@ -12,6 +12,7 @@ import subprocess
 import sys
 import threading
 import tkinter as tk
+import tkinter.font as tkfont
 from pathlib import Path
 from tkinter import filedialog, messagebox, ttk
 
@@ -834,6 +835,132 @@ class ConfigGUI:
         widget.bind("<Motion>", lambda event: self._show_hover_hint(text, event.x_root + 12, event.y_root + 18), add="+")
         widget.bind("<Leave>", self._hide_hover_hint, add="+")
 
+    def _add_help_marker(self, parent, title_text, callback, hint_text):
+        title_font = tkfont.Font(family="Segoe UI", size=9, weight="bold")
+        title_width = int(title_font.measure(str(title_text)))
+        marker = tk.Label(
+            parent,
+            text="?",
+            bg="#0d1117",
+            fg="#4cc9ff",
+            cursor="hand2",
+            font=("Consolas", 10, "bold"),
+            padx=0,
+            pady=0,
+        )
+        marker.place(x=title_width + 18, y=-2, anchor="nw")
+        marker.bind("<Button-1>", lambda _event: callback())
+        self._bind_hover_hint(marker, hint_text)
+        return marker
+
+    def _show_themed_help(self, title, lines):
+        help_window = tk.Toplevel(self.root)
+        help_window.title(str(title))
+        help_window.transient(self.root)
+        help_window.configure(bg="#06080b")
+        help_window.resizable(False, False)
+        try:
+            help_window.attributes("-topmost", True)
+        except Exception:
+            pass
+
+        shell = tk.Frame(
+            help_window,
+            bg="#06080b",
+            highlightbackground="#173A5A",
+            highlightcolor="#173A5A",
+            highlightthickness=1,
+            bd=0,
+            padx=14,
+            pady=12,
+        )
+        shell.pack(fill="both", expand=True)
+
+        tk.Label(
+            shell,
+            text=str(title),
+            bg="#06080b",
+            fg="#4cc9ff",
+            anchor="w",
+            justify="left",
+            font=("Segoe UI", 10, "bold"),
+        ).pack(anchor="w")
+
+        body = tk.Text(
+            shell,
+            bg="#06080b",
+            fg="#7de8ff",
+            wrap="word",
+            width=68,
+            height=max(10, len(lines) + 2),
+            relief="flat",
+            bd=0,
+            highlightthickness=0,
+            insertbackground="#7de8ff",
+            padx=0,
+            pady=10,
+            font=("Consolas", 9),
+        )
+        body.tag_configure("body", foreground="#7de8ff", font=("Consolas", 9))
+        body.tag_configure("param", foreground="#ffffff", font=("Consolas", 9, "bold"))
+        body.tag_configure("section", foreground="#ffffff", font=("Segoe UI", 9, "bold"))
+        body.tag_configure("bullet", foreground="#7de8ff", font=("Consolas", 9))
+
+        for raw_line in lines:
+            line = str(raw_line)
+            stripped = line.strip()
+
+            if not stripped:
+                body.insert("end", "\n", "body")
+                continue
+
+            if stripped.startswith("- "):
+                body.insert("end", f"{line}\n", "bullet")
+                continue
+
+            if ":" in line:
+                name_part, detail_part = line.split(":", 1)
+                if detail_part.strip():
+                    body.insert("end", "-> ", "param")
+                    body.insert("end", name_part.strip(), "param")
+                    body.insert("end", f":{detail_part}\n", "body")
+                    continue
+                body.insert("end", f"{name_part.strip()}:\n", "section")
+                continue
+
+            body.insert("end", f"{line}\n", "body")
+
+        body.config(state="disabled")
+        body.pack(anchor="w", fill="both", expand=True)
+
+        tk.Button(
+            shell,
+            text="FECHAR",
+            command=help_window.destroy,
+            bg="#111827",
+            fg="#4cc9ff",
+            activebackground="#172033",
+            activeforeground="#7de8ff",
+            relief="solid",
+            borderwidth=1,
+            padx=10,
+            pady=3,
+            cursor="hand2",
+        ).pack(anchor="e", pady=(4, 0))
+
+        help_window.update_idletasks()
+        root_x = self.root.winfo_rootx()
+        root_y = self.root.winfo_rooty()
+        root_w = self.root.winfo_width()
+        root_h = self.root.winfo_height()
+        win_w = help_window.winfo_width()
+        win_h = help_window.winfo_height()
+        pos_x = root_x + max(20, int((root_w - win_w) / 2))
+        pos_y = root_y + max(20, int((root_h - win_h) / 2))
+        help_window.geometry(f"+{pos_x}+{pos_y}")
+        help_window.grab_set()
+        help_window.focus_force()
+
     def _create_delete_track_button(self, parent, row_key):
         self._ensure_delete_icon()
 
@@ -1065,6 +1192,7 @@ class ConfigGUI:
 
         analysis_box = ttk.LabelFrame(settings_row, text="Analysis settings", padding=10)
         analysis_box.grid(row=0, column=0, sticky="nsew", padx=(0, 4))
+        self._add_help_marker(analysis_box, "Analysis settings", self._show_analysis_settings_help, "Ajuda de Analysis settings")
         analysis_defaults = {
             "error_gain_up": 1.2,
             "error_gain_down": 2.2,
@@ -1116,6 +1244,7 @@ class ConfigGUI:
 
         guardian_box = ttk.LabelFrame(settings_row, text="Guardian", padding=10)
         guardian_box.grid(row=0, column=1, sticky="nsew", padx=(4, 0))
+        self._add_help_marker(guardian_box, "Guardian", self._show_guardian_help, "Ajuda de Guardian")
         guardian_defaults = {
             "gain_lufs": 0.6,
             "max_lufs_correction_db": 1.2,
@@ -1194,19 +1323,20 @@ class ConfigGUI:
         ttk.Label(run_box, text="Web API Timeout").grid(row=3, column=2, sticky="w", pady=(6, 0))
         ttk.Entry(run_box, textvariable=self.run_vars["webapi_timeout"], width=14).grid(row=3, column=3, sticky="w", padx=8, pady=(6, 0))
 
-        ttk.Label(run_box, text="ReaStream IP").grid(row=4, column=0, sticky="w", pady=(6, 0))
+        ttk.Label(run_box, text="ReaStream IP/Filtro").grid(row=4, column=0, sticky="w", pady=(6, 0))
         ttk.Entry(run_box, textvariable=self.run_vars["reastream_host"], width=14).grid(row=4, column=1, sticky="w", padx=8, pady=(6, 0))
         ttk.Label(run_box, text="ReaStream Port").grid(row=4, column=2, sticky="w", pady=(6, 0))
         ttk.Entry(run_box, textvariable=self.run_vars["reastream_port"], width=14).grid(row=4, column=3, sticky="w", padx=8, pady=(6, 0))
+        ttk.Label(run_box, text="0.0.0.0 = qualquer origem | IP remoto = filtra remetente", foreground="#6b7280").grid(row=5, column=0, columnspan=4, sticky="w", pady=(2, 0))
 
         reastream_toggle = self._create_image_toggle(run_box, self.run_vars["reastream"], "Use ReaStream")
-        reastream_toggle.grid(row=5, column=0, columnspan=2, sticky="w", pady=(8, 0))
+        reastream_toggle.grid(row=6, column=0, columnspan=2, sticky="w", pady=(8, 0))
         verbose_toggle = self._create_image_toggle(run_box, self.run_vars["verbose"], "Verbose (required for telemetry)")
-        verbose_toggle.grid(row=5, column=2, columnspan=2, sticky="w", pady=(8, 0))
-        ttk.Label(run_box, text="Cal SR ref Hz (0=off)").grid(row=6, column=0, sticky="w", pady=(6, 0))
-        ttk.Entry(run_box, textvariable=self.run_vars["calibrate_freq"], width=14).grid(row=6, column=1, sticky="w", padx=8, pady=(6, 0))
+        verbose_toggle.grid(row=6, column=2, columnspan=2, sticky="w", pady=(8, 0))
+        ttk.Label(run_box, text="Cal SR ref Hz (0=off)").grid(row=7, column=0, sticky="w", pady=(6, 0))
+        ttk.Entry(run_box, textvariable=self.run_vars["calibrate_freq"], width=14).grid(row=7, column=1, sticky="w", padx=8, pady=(6, 0))
         ttk.Button(run_box, text="Como usar?", command=self._show_sr_cal_help).grid(
-            row=6,
+            row=7,
             column=2,
             sticky="w",
             pady=(6, 0),
@@ -1262,7 +1392,47 @@ class ConfigGUI:
             "- Se 640 Hz no Reaper e 640 no campo, tende a factor~1.0.",
             "- Se SR Cal oscilar, repita com volume mais limpo do tom.",
         ]
-        messagebox.showinfo("Como usar SR Cal", "\n".join(lines))
+        self._show_themed_help("Como usar SR Cal", lines)
+
+    def _show_analysis_settings_help(self):
+        lines = [
+            "Analysis settings:",
+            "",
+            "Error gain up/down: agressividade da correcao quando precisa subir ou descer nivel.",
+            "Max step up/down: limite maximo de ajuste por ciclo em dB.",
+            "Error deadband: faixa morta onde pequenas diferencas sao ignoradas.",
+            "Max tracks raise/cycle: quantas tracks podem subir no mesmo ciclo.",
+            "LUFS warning threshold: alerta para mix/master alto demais.",
+            "Silence floor RMS: abaixo disso o sinal e tratado como silencio.",
+            "Blend spectral: peso da analise tonal/espectral na decisao final.",
+            "Blend level meter: peso do medidor de nivel na decisao final.",
+            "Level gain: ganho aplicado ao erro de nivel antes do clamp.",
+            "Level error clip: limite maximo do erro de nivel considerado.",
+            "Level source: fonte do medidor usada no controle de nivel.",
+            "",
+            "Regra pratica:",
+            "- resposta lenta: aumente Error gain e/ou Max step.",
+            "- resposta nervosa: aumente deadband ou reduza os gains.",
+            "- leitura ruim em silencio: ajuste Silence floor RMS.",
+        ]
+        self._show_themed_help("Ajuda: Analysis settings", lines)
+
+    def _show_guardian_help(self):
+        lines = [
+            "Guardian:",
+            "",
+            "Gain LUFS: peso da correcao baseada em loudness.",
+            "Max correction (dB): limite maximo da correcao por loudness.",
+            "Deadband (dB): faixa onde o Guardian nao reage.",
+            "Min activity dB: ignora leitura muito baixa ou sem energia util.",
+            "Gate threshold (dB): trava correcoes quando a diferenca e fraca demais.",
+            "",
+            "Regra pratica:",
+            "- se o Guardian corrige demais, reduza Gain LUFS ou Max correction.",
+            "- se quase nunca corrige, diminua Deadband ou Gate threshold.",
+            "- se reage a ruido, aumente Min activity dB.",
+        ]
+        self._show_themed_help("Ajuda: Guardian", lines)
 
     def _delete_selected_profile(self):
         selected = str(self.run_vars.get("profile", tk.StringVar(value="")).get()).strip()

@@ -218,6 +218,12 @@ start "" "AlexStudioMix.exe"
 "@
 Set-Content -Path "$appDir\Run_AlexStudioMix.bat" -Value $launcher -Encoding ASCII
 
+# User-facing README
+$readmeSrc = Join-Path $root "README_DIST.md"
+if (Test-Path $readmeSrc) {
+    Copy-Item $readmeSrc "$appDir\README.md" -Force
+}
+
 Write-Host "Build complete!"
 Write-Host "Distribution folder: $appDir"
 Write-Host "Copy this folder to the target PC and run AlexStudioMix.exe"

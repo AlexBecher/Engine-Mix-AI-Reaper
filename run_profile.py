@@ -16,6 +16,7 @@ which will also write the profile into learning/profiles.json.
 """
 
 import argparse
+import ipaddress
 import os
 import socket
 import time
@@ -122,6 +123,68 @@ def _candidate_bind_hosts(host_value):
         if value not in candidates:
             candidates.append(value)
     return candidates
+
+
+def _local_ipv4_addresses():
+    addresses = {"0.0.0.0", "127.0.0.1"}
+    for name in (socket.gethostname(), socket.getfqdn(), "localhost"):
+        try:
+            infos = socket.getaddrinfo(name, None, socket.AF_INET, socket.SOCK_DGRAM)
+        except socket.gaierror:
+            continue
+        for info in infos:
+            sockaddr = info[4]
+            if sockaddr and sockaddr[0]:
+                addresses.add(str(sockaddr[0]))
+
+    probe = None
+    try:
+        probe = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        probe.connect(("8.8.8.8", 80))
+        local_ip = probe.getsockname()[0]
+        if local_ip:
+            addresses.add(str(local_ip))
+    except OSError:
+        pass
+    finally:
+        if probe is not None:
+            probe.close()
+    return addresses
+
+
+def _resolve_reastream_binding(host_value):
+    requested_host = _normalize_host(host_value)
+    local_addresses = _local_ipv4_addresses()
+
+    if requested_host in {"", "0.0.0.0"}:
+        return _candidate_bind_hosts("0.0.0.0"), None, requested_host or "0.0.0.0"
+
+    if requested_host == "localhost":
+        requested_host = "127.0.0.1"
+
+    try:
+        resolved_hosts = {
+            str(info[4][0])
+            for info in socket.getaddrinfo(requested_host, None, socket.AF_INET, socket.SOCK_DGRAM)
+            if info[4] and info[4][0]
+        }
+    except socket.gaierror:
+        resolved_hosts = set()
+
+    try:
+        ipaddress.ip_address(requested_host)
+        resolved_hosts.add(requested_host)
+    except ValueError:
+        pass
+
+    local_matches = [host for host in resolved_hosts if host in local_addresses]
+    if local_matches:
+        return _candidate_bind_hosts(local_matches[0]), None, requested_host
+
+    if requested_host in local_addresses:
+        return _candidate_bind_hosts(requested_host), None, requested_host
+
+    return _candidate_bind_hosts("0.0.0.0"), requested_host, requested_host
 
 
 def _decode_reastream_frames(packet, channels, identifier=None, verbose=False):
@@ -650,9 +713,11 @@ def main():
             os.environ["MIX_ROBO_VOCAL_FOCUS"] = "1"
 
         if use_reastream:
+            bind_candidates, sender_ip_filter, requested_reastream_host = _resolve_reastream_binding(args.reastream_host)
             print(
                 "[REASTREAM CONFIG] "
-                f"host={args.reastream_host} port={args.reastream_port} "
+                f"host={requested_reastream_host} port={args.reastream_port} "
+                f"bind={bind_candidates[0]} source_filter={(sender_ip_filter or '*')} "
                 f"identifier={args.reastream_identifier!r}"
             )
 
@@ -734,7 +799,8 @@ def main():
             if use_reastream:
                 print(
                     "Starting ReaStream UDP capture "
-                    f"({args.reastream_host}:{args.reastream_port}, "
+                    f"(requested={requested_reastream_host}, bind={bind_candidates[0]}:{args.reastream_port}, "
+                    f"source_filter={(sender_ip_filter or '*')}, "
                     f"identifier={args.reastream_identifier!r})."
                 )
             elif use_test_audio:
@@ -986,18 +1052,20 @@ def main():
 
             bind_errors = []
             bound_host = None
-            for bind_host in _candidate_bind_hosts(args.reastream_host):
+            for bind_host in bind_candidates:
                 try:
                     sock.bind((bind_host, args.reastream_port))
                     bound_host = bind_host
                     _emit_reastream_status("BOUND", f"{bind_host}:{args.reastream_port}")
                     if args.verbose:
                         print(f"[REASTREAM] Bindado em {bind_host}:{args.reastream_port}")
-                        if bind_host != args.reastream_host:
+                        if bind_host != requested_reastream_host:
                             print(
-                                f"[REASTREAM] Host solicitado {args.reastream_host} indisponivel; "
-                                f"usando fallback {bind_host}."
+                                f"[REASTREAM] Host solicitado {requested_reastream_host} nao eh um bind local; "
+                                f"usando bind {bind_host}."
                             )
+                        if sender_ip_filter:
+                            print(f"[REASTREAM] Filtrando pacotes pelo IP de origem {sender_ip_filter}.")
                     break
                 except OSError as exc:
                     if getattr(exc, "winerror", None) == 10048:
@@ -1024,7 +1092,7 @@ def main():
                 stream_state = "waiting"
                 while True:
                     try:
-                        data, _ = sock.recvfrom(max(1024, args.reastream_buffer_size))
+                        data, sender = sock.recvfrom(max(1024, args.reastream_buffer_size))
                     except TimeoutError:
                         if last_packet_time is None and stream_state != "waiting":
                             stream_state = "waiting"
@@ -1033,6 +1101,11 @@ def main():
                             stream_state = "stalled"
                             _emit_reastream_status("STALL", "No packets for >2s")
                         continue
+
+                    sender_ip = str(sender[0]) if sender else ""
+                    if sender_ip_filter and sender_ip != sender_ip_filter:
+                        continue
+
                     packet_count += 1
                     last_packet_time = time.monotonic()
                     if stream_state != "streaming":
