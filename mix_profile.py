@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 import json
 import os
+import time
 import unicodedata
 import numpy as np
 
@@ -66,8 +67,8 @@ METER_GAIN_LUFS           = _mf.get("gain_lufs",               settings.get("lev
 METER_MAX_LUFS_CORRECTION_DB = _mf.get("max_lufs_correction_db", settings.get("level_error_clip_db", 1.2))
 METER_DEADBAND_LUFS       = _mf.get("deadband_lufs",           settings.get("level_deadband_db", 0.7))
 METER_MIN_ACTIVITY_DB     = _mf.get("min_activity_db", -50.0)
-# For meter_peak_db (scale: -1500=silence to 0=clipping), use higher threshold (less negative = active)
-METER_PEAK_MIN_ACTIVITY_DB = _mf.get("meter_peak_min_activity_db", -1300.0)
+# Accept legacy dB*10 values (-1200) or actual dB values (-120.0) for Web API meter_peak.
+METER_PEAK_MIN_ACTIVITY_DB = _mf.get("meter_peak_min_activity_db", -50.0)
 # Guardian gating: only act when level deviation exceeds this threshold (dB)
 GUARDIAN_GATE_THRESHOLD_DB = _mf.get("guardian_gate_threshold_db", 3.0)
 METER_MIN_VALID_SECONDS   = _mf.get("min_valid_seconds", 2.0)
@@ -124,6 +125,101 @@ def _sanitize_role_targets(raw_targets, fallback):
     return out
 
 
+def _normalize_meter_peak_db(value):
+    peak_db = _safe_float(value, np.nan)
+    if not np.isfinite(peak_db):
+        return float(np.nan)
+    if abs(peak_db) > 150.0:
+        peak_db /= 10.0
+    return float(np.clip(peak_db, -133.0, 12.0))
+
+
+def _normalize_meter_peak_activity_threshold(value):
+    threshold = _safe_float(value, -120.0)
+    if not np.isfinite(threshold):
+        return -120.0
+    if abs(threshold) > 150.0:
+        threshold /= 10.0
+    return float(np.clip(threshold, -133.0, 12.0))
+
+
+def _get_meter_peak_activity_state(meter):
+    """
+    When Web API provides meter_peak_db, it is the authoritative activity signal.
+    This prevents LUFS/RMS fallback from re-opening the fader during vocal pauses.
+    """
+    if not isinstance(meter, dict) or "meter_peak_db" not in meter:
+        return None
+
+    peak_val = _normalize_meter_peak_db(meter.get("meter_peak_db"))
+    if not np.isfinite(peak_val):
+        return False
+    return bool(peak_val >= METER_PEAK_MIN_ACTIVITY_DB)
+
+
+def _get_instant_track_meter_activity(meter):
+    if not isinstance(meter, dict) or not meter:
+        return False
+
+    peak_activity = _get_meter_peak_activity_state(meter)
+    if peak_activity is not None:
+        return bool(peak_activity)
+
+    rms_db = meter.get("rms_db")
+    if rms_db is not None:
+        rms_val = _safe_float(rms_db, np.nan)
+        if np.isfinite(rms_val):
+            return bool(rms_val >= METER_MIN_ACTIVITY_DB)
+
+    lufs = meter.get("lufs")
+    if lufs is not None:
+        lufs_val = _safe_float(lufs, np.nan)
+        if np.isfinite(lufs_val):
+            return bool(lufs_val >= METER_MIN_ACTIVITY_DB)
+
+    return False
+
+
+def _get_stable_track_meter_activity(track, meter):
+    """Debounce track activity so brief spikes or pauses do not flip control instantly."""
+    track_id = int(track)
+    now = time.monotonic()
+    raw_active = _get_instant_track_meter_activity(meter)
+    hold_seconds = max(0.0, float(METER_MIN_VALID_SECONDS))
+
+    state = TRACK_METER_ACTIVITY_STATE.get(track_id)
+    if state is None:
+        stable_active = bool(raw_active) if hold_seconds <= 0.0 else False
+        state = {
+            "raw_active": raw_active,
+            "raw_since": now,
+            "stable_active": stable_active,
+            "stable_since": now,
+        }
+        TRACK_METER_ACTIVITY_STATE[track_id] = state
+        return bool(stable_active)
+
+    if state.get("raw_active") != raw_active:
+        state["raw_active"] = raw_active
+        state["raw_since"] = now
+
+    stable_active = bool(state.get("stable_active", False))
+    if hold_seconds <= 0.0:
+        stable_active = raw_active
+    elif raw_active != stable_active:
+        raw_since = float(state.get("raw_since", now))
+        if (now - raw_since) >= hold_seconds:
+            stable_active = raw_active
+
+    if stable_active != bool(state.get("stable_active", False)):
+        state["stable_active"] = stable_active
+        state["stable_since"] = now
+    else:
+        state["stable_active"] = stable_active
+
+    return bool(stable_active)
+
+
 DEFAULT_LEVEL_ROLE_TARGETS = {
     "vocals": -18.0,
     "lead": -18.0,
@@ -162,6 +258,7 @@ METER_GAIN_LUFS              = max(0.0, _safe_float(METER_GAIN_LUFS, 0.6))
 METER_MAX_LUFS_CORRECTION_DB = max(0.1, _safe_float(METER_MAX_LUFS_CORRECTION_DB, 1.2))
 METER_DEADBAND_LUFS          = max(0.0, _safe_float(METER_DEADBAND_LUFS, 0.7))
 METER_MIN_ACTIVITY_DB        = _safe_float(METER_MIN_ACTIVITY_DB, -50.0)
+METER_PEAK_MIN_ACTIVITY_DB   = _normalize_meter_peak_activity_threshold(METER_PEAK_MIN_ACTIVITY_DB)
 METER_MIN_VALID_SECONDS      = max(0.0, _safe_float(METER_MIN_VALID_SECONDS, 2.0))
 METER_TARGETS = _sanitize_role_targets(METER_TARGETS_RAW, DEFAULT_METER_TARGETS)
 SPECTRAL_NOISE_FLOOR_DB = _safe_float(SPECTRAL_NOISE_FLOOR_DB, -40.0)
@@ -174,6 +271,7 @@ ENABLE_SINGLE_SOURCE_SPECTRAL_GUARD = _safe_bool(ENABLE_SINGLE_SOURCE_SPECTRAL_G
 # =============================================================================
 TRACK_CURRENT_DB = dict(TRACK_CONFIG_FADER_DB)
 TRACK_ERROR_EMA = {}
+TRACK_METER_ACTIVITY_STATE = {}
 TRACK_ROLE_BY_ID = {}
 ACTIVE_LINEUP_SCENE = ""
 
@@ -551,6 +649,9 @@ def _reload_config():
     for track in list(TRACK_ERROR_EMA.keys()):
         if track not in valid_tracks:
             TRACK_ERROR_EMA.pop(track, None)
+    for track in list(TRACK_METER_ACTIVITY_STATE.keys()):
+        if track not in valid_tracks:
+            TRACK_METER_ACTIVITY_STATE.pop(track, None)
 
     for track, configured_db in configured_faders.items():
         configured_db = float(configured_db)
@@ -589,7 +690,7 @@ def _reload_config():
     METER_MAX_LUFS_CORRECTION_DB = _rmf.get("max_lufs_correction_db", settings.get("level_error_clip_db", 1.2))
     METER_DEADBAND_LUFS       = _rmf.get("deadband_lufs",           settings.get("level_deadband_db", 0.7))
     METER_MIN_ACTIVITY_DB     = _rmf.get("min_activity_db", -50.0)
-    METER_PEAK_MIN_ACTIVITY_DB = _rmf.get("meter_peak_min_activity_db", -1300.0)
+    METER_PEAK_MIN_ACTIVITY_DB = _rmf.get("meter_peak_min_activity_db", -50.0)
     GUARDIAN_GATE_THRESHOLD_DB = _rmf.get("guardian_gate_threshold_db", 3.0)
     METER_MIN_VALID_SECONDS   = _rmf.get("min_valid_seconds", 2.0)
     _meter_targets_raw        = settings.get("meter_targets", {})
@@ -613,7 +714,7 @@ def _reload_config():
     METER_MAX_LUFS_CORRECTION_DB = max(0.1, _safe_float(METER_MAX_LUFS_CORRECTION_DB, 1.2))
     METER_DEADBAND_LUFS          = max(0.0, _safe_float(METER_DEADBAND_LUFS, 0.7))
     METER_MIN_ACTIVITY_DB        = _safe_float(METER_MIN_ACTIVITY_DB, -50.0)
-    METER_PEAK_MIN_ACTIVITY_DB   = _safe_float(METER_PEAK_MIN_ACTIVITY_DB, -1300.0)
+    METER_PEAK_MIN_ACTIVITY_DB   = _normalize_meter_peak_activity_threshold(METER_PEAK_MIN_ACTIVITY_DB)
     GUARDIAN_GATE_THRESHOLD_DB   = max(0.0, _safe_float(GUARDIAN_GATE_THRESHOLD_DB, 3.0))
     METER_MIN_VALID_SECONDS      = max(0.0, _safe_float(METER_MIN_VALID_SECONDS, 2.0))
     METER_TARGETS = _sanitize_role_targets(_meter_targets_raw, DEFAULT_METER_TARGETS)
@@ -633,15 +734,23 @@ def _compute_level_delta_db(track, role, track_meters):
     if not meter:
         return 0.0
 
-    # Prefer meter_peak_db (from TRACK col 7: last_meter_peak in dB*10, scale -1500 to 0)
-    measured = meter.get("meter_peak_db")
-    level_source = "meter_peak_db"
-    activity_threshold = METER_PEAK_MIN_ACTIVITY_DB
+    # When Web API provides meter_peak_db, it fully owns activity gating.
+    # If the track is silent there, do not fall back to LUFS/RMS for correction.
+    stable_activity = _get_stable_track_meter_activity(track, meter)
+    peak_activity = _get_meter_peak_activity_state(meter)
+    if peak_activity is not None:
+        if not stable_activity:
+            return 0.0
+        measured = meter.get("meter_peak_db")
+        level_source = "meter_peak_db"
+        activity_threshold = METER_PEAK_MIN_ACTIVITY_DB
+    else:
+        measured = None
+        level_source = LEVEL_SOURCE
+        activity_threshold = METER_MIN_ACTIVITY_DB
 
     # Fallback chain: rms_db, lufs
     if measured is None:
-        level_source = LEVEL_SOURCE
-        activity_threshold = METER_MIN_ACTIVITY_DB
         if level_source in ("rms", "rms_db"):
             measured = meter.get("rms_db")
         else:
@@ -659,7 +768,10 @@ def _compute_level_delta_db(track, role, track_meters):
     if measured is None:
         return 0.0
 
-    measured_value = _safe_float(measured, np.nan)
+    if level_source == "meter_peak_db":
+        measured_value = _normalize_meter_peak_db(measured)
+    else:
+        measured_value = _safe_float(measured, np.nan)
     if not np.isfinite(measured_value):
         return 0.0
 
@@ -873,38 +985,17 @@ def _smooth_track_error(track, error):
     return float(smoothed)
 
 
-def _is_track_meter_active(meter):
+def _is_track_meter_active(track, meter):
     if not isinstance(meter, dict):
         return False
-
-    # Prefer meter_peak_db (from TRACK col 7: last_meter_peak in dB*10, scale -1500 to 0)
-    meter_peak_db = meter.get("meter_peak_db")
-    if meter_peak_db is not None:
-        peak_val = _safe_float(meter_peak_db, np.nan)
-        # For meter_peak_db scale (-1500=silence to 0=clipping), use higher threshold (less negative = active)
-        if np.isfinite(peak_val) and peak_val >= METER_PEAK_MIN_ACTIVITY_DB:
-            return True
-
-    rms_db = meter.get("rms_db")
-    if rms_db is not None:
-        rms_val = _safe_float(rms_db, np.nan)
-        if np.isfinite(rms_val) and rms_val >= METER_MIN_ACTIVITY_DB:
-            return True
-
-    lufs = meter.get("lufs")
-    if lufs is not None:
-        lufs_val = _safe_float(lufs, np.nan)
-        if np.isfinite(lufs_val) and lufs_val >= METER_MIN_ACTIVITY_DB:
-            return True
-
-    return False
+    return _get_stable_track_meter_activity(track, meter)
 
 
 def _active_roles_from_track_meters(track_ids, track_meters):
     active_roles = set()
     for track_id in track_ids:
         meter = track_meters.get(int(track_id), {})
-        if not _is_track_meter_active(meter):
+        if not _is_track_meter_active(track_id, meter):
             continue
         role = TRACK_ROLE_BY_ID.get(int(track_id), "other")
         active_roles.add(str(role).strip().lower() or "other")
@@ -1120,9 +1211,29 @@ def _apply_actions(actions, track_map, debug=False, dry_run=False, band_meter_db
                 print(f"[process] Track meter read failed: {exc}")
 
     if track_meters:
+        for track_id in list(pending.keys()):
+            meter = track_meters.get(int(track_id), {})
+            if not isinstance(meter, dict) or not meter:
+                continue
+            if _is_track_meter_active(track_id, meter):
+                continue
+
+            pending.pop(int(track_id), None)
+            TRACK_ERROR_EMA.pop(int(track_id), None)
+            if debug:
+                meter_peak = _normalize_meter_peak_db(meter.get("meter_peak_db"))
+                meter_lufs = meter.get("lufs")
+                meter_rms = meter.get("rms_db")
+                print(
+                    f"[process] Track {track_id}: skipped (no Web API signal) "
+                    f"meter_peak={(f'{meter_peak:+.2f}' if np.isfinite(meter_peak) else '--')} "
+                    f"lufs={(f'{meter_lufs:+.2f}' if meter_lufs is not None else '--')} "
+                    f"rms={(f'{meter_rms:+.2f}' if meter_rms is not None else '--')}"
+                )
+
         for track_id in meter_candidate_tracks:
             meter = track_meters.get(int(track_id), {})
-            if not _is_track_meter_active(meter):
+            if not _is_track_meter_active(track_id, meter):
                 continue
 
             role = TRACK_ROLE_BY_ID.get(int(track_id), "other")

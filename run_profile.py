@@ -1052,30 +1052,60 @@ def main():
 
             bind_errors = []
             bound_host = None
+            _bind_max_retries = 8
+            _bind_retry_delay = 0.5
             for bind_host in bind_candidates:
-                try:
-                    sock.bind((bind_host, args.reastream_port))
-                    bound_host = bind_host
-                    _emit_reastream_status("BOUND", f"{bind_host}:{args.reastream_port}")
-                    if args.verbose:
-                        print(f"[REASTREAM] Bindado em {bind_host}:{args.reastream_port}")
-                        if bind_host != requested_reastream_host:
-                            print(
-                                f"[REASTREAM] Host solicitado {requested_reastream_host} nao eh um bind local; "
-                                f"usando bind {bind_host}."
-                            )
-                        if sender_ip_filter:
-                            print(f"[REASTREAM] Filtrando pacotes pelo IP de origem {sender_ip_filter}.")
+                for _bind_attempt in range(_bind_max_retries):
+                    try:
+                        sock.bind((bind_host, args.reastream_port))
+                        bound_host = bind_host
+                        _emit_reastream_status("BOUND", f"{bind_host}:{args.reastream_port}")
+                        if args.verbose:
+                            print(f"[REASTREAM] Bindado em {bind_host}:{args.reastream_port}")
+                            if bind_host != requested_reastream_host:
+                                print(
+                                    f"[REASTREAM] Host solicitado {requested_reastream_host} nao eh um bind local; "
+                                    f"usando bind {bind_host}."
+                                )
+                            if sender_ip_filter:
+                                print(f"[REASTREAM] Filtrando pacotes pelo IP de origem {sender_ip_filter}.")
+                        break
+                    except OSError as exc:
+                        if getattr(exc, "winerror", None) == 10048:
+                            # Port still in use (previous process just killed). Retry with delay.
+                            if _bind_attempt < (_bind_max_retries - 1):
+                                _emit_reastream_status(
+                                    "WAITING",
+                                    f"port {args.reastream_port} in use, retrying ({_bind_attempt + 1}/{_bind_max_retries - 1})...",
+                                )
+                                print(
+                                    f"[REASTREAM] Porta {args.reastream_port} em uso, aguardando liberacao "
+                                    f"({_bind_attempt + 1}/{_bind_max_retries - 1})..."
+                                )
+                                time.sleep(_bind_retry_delay)
+                                # Recreate socket for retry so it's in a clean state
+                                try:
+                                    sock.close()
+                                except Exception:
+                                    pass
+                                sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+                                try:
+                                    sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+                                except OSError:
+                                    pass
+                                try:
+                                    sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
+                                except OSError:
+                                    pass
+                                sock.settimeout(0.5)
+                                continue
+                            # Exhausted retries
+                            bind_errors.append((bind_host, exc))
+                            break
+                        bind_errors.append((bind_host, exc))
+                        break
+                if bound_host is not None:
                     break
-                except OSError as exc:
-                    if getattr(exc, "winerror", None) == 10048:
-                        sock.close()
-                        raise SystemExit(
-                            "Nao foi possivel abrir a porta UDP 58710 do ReaStream porque ela ja esta em uso. "
-                            "Feche/desative instancias de ReaStream em modo Receive no REAPER (ou outro app que esteja escutando nessa porta) "
-                            "e execute novamente."
-                        )
-                    bind_errors.append((bind_host, exc))
 
             if bound_host is None:
                 sock.close()

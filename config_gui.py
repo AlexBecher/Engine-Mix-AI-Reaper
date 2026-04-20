@@ -78,6 +78,70 @@ def _app_dir():
     return Path(__file__).resolve().parent
 
 
+def _terminate_process_tree(process_handle, timeout=2.0):
+    if process_handle is None:
+        return
+
+    try:
+        if process_handle.poll() is not None:
+            return
+    except Exception:
+        pass
+
+    pid = None
+    try:
+        pid = process_handle.pid
+    except Exception:
+        pass
+
+    try:
+        process_handle.terminate()
+        process_handle.wait(timeout=timeout)
+        return
+    except subprocess.TimeoutExpired:
+        pass
+    except Exception:
+        pass
+
+    if os.name == "nt" and pid:
+        taskkill_kwargs = {
+            "args": ["taskkill", "/PID", str(pid), "/T", "/F"],
+            "stdout": subprocess.DEVNULL,
+            "stderr": subprocess.DEVNULL,
+            "check": False,
+        }
+        if hasattr(subprocess, "CREATE_NO_WINDOW"):
+            taskkill_kwargs["creationflags"] = subprocess.CREATE_NO_WINDOW
+
+        try:
+            subprocess.run(**taskkill_kwargs)
+            process_handle.wait(timeout=timeout)
+            return
+        except Exception:
+            pass
+
+    try:
+        process_handle.kill()
+        process_handle.wait(timeout=timeout)
+    except Exception:
+        pass
+
+
+def _hidden_process_popen_kwargs():
+    if os.name != "nt":
+        return {}
+
+    kwargs = {}
+    if hasattr(subprocess, "CREATE_NO_WINDOW"):
+        kwargs["creationflags"] = subprocess.CREATE_NO_WINDOW
+
+    startupinfo = subprocess.STARTUPINFO()
+    startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+    startupinfo.wShowWindow = 0
+    kwargs["startupinfo"] = startupinfo
+    return kwargs
+
+
 def _asset_path(filename):
     base = _app_dir()
     candidate = base / "img" / str(filename)
@@ -1249,14 +1313,14 @@ class ConfigGUI:
             "gain_lufs": 0.6,
             "max_lufs_correction_db": 1.2,
             "deadband_lufs": 0.7,
-            "meter_peak_min_activity_db": -1300.0,
+            "meter_peak_min_activity_db": -50.0,
             "guardian_gate_threshold_db": 3.0,
         }
         guardian_labels = [
             ("Gain LUFS", "gain_lufs", tk.DoubleVar),
             ("Max correction (dB)", "max_lufs_correction_db", tk.DoubleVar),
             ("Deadband (dB)", "deadband_lufs", tk.DoubleVar),
-            ("Min activity dB", "meter_peak_min_activity_db", tk.DoubleVar),
+            ("Peak min activity dB", "meter_peak_min_activity_db", tk.DoubleVar),
             ("Gate threshold (dB)", "guardian_gate_threshold_db", tk.DoubleVar),
         ]
         _gf = self.config.get("analysis_settings", {}).get("meter_fusion", {})
@@ -2898,6 +2962,7 @@ class ConfigGUI:
                 encoding="utf-8",
                 errors="replace",
                 bufsize=1,
+                **_hidden_process_popen_kwargs(),
             )
             self.active_process_cmd = self._command_signature(cmd)
             process_handle = self.process_handle
@@ -2935,14 +3000,9 @@ class ConfigGUI:
     def _stop_process(self, manual=False):
         if self.process_handle is None:
             return
+        process_handle = self.process_handle
         try:
-            self.process_handle.terminate()
-            self.process_handle.wait(timeout=2.0)
-        except Exception:
-            try:
-                self.process_handle.kill()
-            except Exception:
-                pass
+            _terminate_process_tree(process_handle, timeout=2.0)
         finally:
             self.process_handle = None
             self.active_process_cmd = None

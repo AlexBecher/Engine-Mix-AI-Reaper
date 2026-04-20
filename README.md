@@ -147,6 +147,66 @@ run_gui.bat
 4. Script skips track 160 in next analysis
 5. Check the console log: `[process] Track 160 disabled - skipping`
 
+## Teste de LUFS por track no REAPER
+
+O arquivo `test_web_API_reaper.py` pode ser usado para testar a leitura da Web API do REAPER e descobrir qual comando retorna meter/LUFS para uma track especifica.
+
+### Pre-requisitos
+- REAPER aberto
+- Web Interface habilitada no REAPER
+- IP, porta e base corretos da Web API
+
+### Teste rapido de conexao
+```powershell
+.\.venv\Scripts\python test_web_API_reaper.py --host 127.0.0.1 --port 8080 --base /_
+```
+
+Se estiver tudo certo, o script mostra `REAPER online | NTRACK=...` e um resumo das primeiras tracks.
+
+### Escutar e monitorar a track 2
+1. No REAPER, deixe a `track 2` tocando ou em solo para ouvir somente ela.
+2. Rode o scan de meter para descobrir qual endpoint da Web API traz LUFS/RMS dessa track:
+
+```powershell
+.\.venv\Scripts\python test_web_API_reaper.py --host 127.0.0.1 --port 8080 --base /_ --scan-meter 2 --only-scan
+```
+
+3. Veja no terminal qual linha aparece com `Parsed: LUFS=...` ou `Parsed: RMS=...dB`.
+4. Enquanto a track estiver tocando, repita esse comando para acompanhar a resposta da API.
+
+### Loop simples para ficar acompanhando a track 2
+No PowerShell, voce pode deixar repetindo a leitura a cada 1 segundo:
+
+```powershell
+while ($true) {
+  .\.venv\Scripts\python test_web_API_reaper.py --host 127.0.0.1 --port 8080 --base /_ --scan-meter 2 --only-scan
+  Start-Sleep -Seconds 1
+}
+```
+
+Use `Ctrl+C` para parar.
+
+### Comandos uteis
+- Ver apenas informacoes basicas da track 2:
+
+```powershell
+.\.venv\Scripts\python test_web_API_reaper.py --host 127.0.0.1 --port 8080 --base /_ --tracks 2
+```
+
+- Inspecionar a resposta crua da track 2:
+
+```powershell
+.\.venv\Scripts\python test_web_API_reaper.py --host 127.0.0.1 --port 8080 --base /_ --probe 2
+```
+
+- Testar somente um comando especifico de meter:
+
+```powershell
+.\.venv\Scripts\python test_web_API_reaper.py --host 127.0.0.1 --port 8080 --base /_ --scan-meter 2 --meter-command TRACK/{track}/LOUDNESS --only-meter-commands --only-scan
+```
+
+Se o REAPER estiver em outro computador da rede, troque `127.0.0.1` pelo IP desse computador.
+
 ## ?? For Distribution
 
 Files to include when deploying to another machine:

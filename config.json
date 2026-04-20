@@ -1,45 +1,45 @@
 {
   "master_track": 1,
   "tracks": {
+    "1": {
+      "name": "baixo",
+      "enabled": true,
+      "frozen": false,
+      "min_db": -30.0,
+      "max_db": 0.0,
+      "fader_db": 0.0
+    },
     "2": {
+      "name": "drums",
+      "enabled": true,
+      "frozen": false,
+      "min_db": -28.0,
+      "max_db": -13.1,
+      "fader_db": -7.89
+    },
+    "8": {
       "name": "guitar",
       "enabled": true,
       "frozen": false,
       "min_db": -32.0,
       "max_db": -4.87,
-      "fader_db": -14.19
+      "fader_db": -4.96
     },
-    "3": {
-      "name": "drums",
+    "10": {
+      "name": "keys",
       "enabled": true,
-      "frozen": true,
-      "min_db": -28.0,
-      "max_db": -13.1,
-      "fader_db": -4.87
+      "frozen": false,
+      "min_db": -30.0,
+      "max_db": 0.0,
+      "fader_db": 0.0
     },
     "11": {
       "name": "lead",
       "enabled": true,
       "frozen": false,
       "min_db": -30.0,
-      "max_db": -9.0,
-      "fader_db": -14.69
-    },
-    "12": {
-      "name": "keys",
-      "enabled": true,
-      "frozen": false,
-      "min_db": -30.0,
       "max_db": 0.0,
-      "fader_db": -14.13
-    },
-    "13": {
-      "name": "baixo",
-      "enabled": true,
-      "frozen": false,
-      "min_db": -30.0,
-      "max_db": 0.0,
-      "fader_db": -21.87
+      "fader_db": -15.59
     }
   },
   "analysis_settings": {
@@ -73,7 +73,7 @@
       "max_lufs_correction_db": 1.0,
       "deadband_lufs": 1.0,
       "min_activity_db": -50.0,
-      "meter_peak_min_activity_db": -1200.0,
+      "meter_peak_min_activity_db": -50.0,
       "guardian_gate_threshold_db": 10.0,
       "min_valid_seconds": 2.0
     },
@@ -83,7 +83,7 @@
     "enable_single_source_spectral_guard": true
   },
   "run_settings": {
-    "profile": "Profile_learn_007",
+    "profile": "Worship-PA-Calibrated",
     "reastream": true,
     "reastream_identifier": "master",
     "reastream_host": "0.0.0.0",
